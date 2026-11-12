@@ -103,11 +103,11 @@ UStaticMeshComponent* AArenaSoldier::AddPart(FName Name, USceneComponent* Parent
     return Part;
 }
 
-void AArenaSoldier::Initialize(AArenaMatch* Match, PvG::Team Side, int Index)
+void AArenaSoldier::Initialize(AArenaMatch* Match, PvG::Team Side, int InSlot)
 {
     Arena = Match;
     Team = Side;
-    Slot = Index;
+    Slot = InSlot;
     SetTeamAppearance();
 
     if (const USkeletalMesh* Body = Cast<USkeletalMesh>(Battlemage->GetSkinnedAsset()))
@@ -134,9 +134,9 @@ void AArenaSoldier::SetTeamAppearance()
 
     if (!ArmorMaterial)
         return;
-    const auto Surface = [this](FName Slot, FLinearColor Color, float Metallic, float Roughness)
+    const auto Surface = [this](FName MaterialSlot, FLinearColor Color, float Metallic, float Roughness)
     {
-        if (const int Index = Battlemage->GetMaterialIndex(Slot); Index != INDEX_NONE)
+        if (const int Index = Battlemage->GetMaterialIndex(MaterialSlot); Index != INDEX_NONE)
         {
             UMaterialInstanceDynamic* Finish = UMaterialInstanceDynamic::Create(ArmorMaterial, Battlemage);
             Finish->SetVectorParameterValue(TEXT("Color"), Color);
