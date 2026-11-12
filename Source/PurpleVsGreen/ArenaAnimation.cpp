@@ -99,7 +99,7 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
     CastingRight->SetRelativeRotation(FRotator(5.f + Gather * 15.f - ReleasePulse * 9.f,
         -18.f + PoseCast * 8.f, 12.f + PoseCast * Gesture.Roll));
     CastingLeft->SetRelativeRotation(FRotator(7.f + PoseWard * 32.f + PoseCast * Gesture.Support * 15.f,
-        17.f - PoseCast * Gesture.Support * 14.f - PoseWard * 16.f, -12.f - PoseWard * 44.f));
+        17.f - PoseCast * Gesture.Support * 14.f - PoseWard * 5.f, -12.f + PoseWard * 39.f));
     const float CastExtension = PoseCast * (1.f - .70f * Gather);
     for (int Index = 0; Index < Digits.Num(); ++Index)
     {
