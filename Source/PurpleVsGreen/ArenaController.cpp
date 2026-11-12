@@ -419,9 +419,11 @@ void AArenaController::RunSmoke()
     }
     if (Arena->Rules.State == PvG::Phase::Results)
     {
-        if (Arena->Rules.Score[0] + Arena->Rules.Score[1] == 0 || Arena->PlayerHits == 0 || FrameTimes.Num() < 200)
+        if (FMath::Max(Arena->Rules.Score[0], Arena->Rules.Score[1]) != Arena->ScoreLimit ||
+            Arena->PlayerHits == 0 || Arena->PlayerWards == 0 || FrameTimes.Num() < 200 ||
+            (SmokeRound == 1 && Arena->PlayerCometImpacts == 0))
         {
-            UE_LOG(LogTemp, Error, TEXT("PvG smoke missing kills, player hits or frame data"));
+            UE_LOG(LogTemp, Error, TEXT("PvG smoke missing score limit, hits, ward, frames or a second-round comet impact"));
             FPlatformMisc::RequestExitWithStatus(false, 4);
             return;
         }
@@ -478,8 +480,10 @@ void AArenaController::RunSmoke()
         }
         const FVector Aim = Target->GetActorLocation() + FVector(0, 0, 25) - Eye;
         Soldier->SetAim(Aim.Rotation());
-        Selected = Nearest < 650. ? PvG::Spell::Fan : Nearest > 2350. ? PvG::Spell::Lance :
-            SmokeRound == 1 && FrameTimes.Num() % 120 < 47 ? PvG::Spell::Comet : PvG::Spell::Thread;
+        if (SmokeRound == 1 && Arena->PlayerCometImpacts == 0 && Nearest < 2800.)
+            Selected = PvG::Spell::Comet;
+        else
+            Selected = Nearest < 650. ? PvG::Spell::Fan : Nearest > 2350. ? PvG::Spell::Lance : PvG::Spell::Thread;
         Soldier->Cast(Selected);
         MoveRight(FMath::Sin(GetWorld()->GetTimeSeconds() * 2.0) > 0. ? .75f : -.75f);
     }

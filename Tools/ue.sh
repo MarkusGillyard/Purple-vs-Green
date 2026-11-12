@@ -49,7 +49,7 @@ case "$action" in
     output=$(mktemp -d "$storage/builds/$revision-$configuration.XXXXXX")
     "${ue[@]}" bash "$engine/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun \
       "-project=$project" -platform=Linux "-clientconfig=$configuration" \
-      -build -cook -stage -pak -iostore -package -archive "-archivedirectory=$output" \
+      -build -cook -stage -pak -iostore -package -archive -nodebuginfo "-archivedirectory=$output" \
       -nop4 -unattended -utf8output -nocompileuat "-ubtargs=-NoUBA -NoUbaLocal -MaxParallelActions=${PVG_BUILD_JOBS:-4}" \
       2>&1 | tee "$output/build.log"
     if [[ "$(git -C "$repo" rev-parse HEAD)" != "$revision" || -n "$(git -C "$repo" status --porcelain)" ]]; then
@@ -73,6 +73,7 @@ case "$action" in
       exit 2
     fi
     profile=$(mktemp -d "$storage/smoke.XXXXXX")
+    (cd "$package" && sha256sum --strict -c ../SHA256SUMS) > "$profile/hash-readback.log"
     timeout 220 "$package/PurpleVsGreen.sh" -PvGSmoke "-userdir=$profile" \
       -windowed -ResX=1920 -ResY=1080 -NoVSync -unattended -NoCrashDialog -stdout -FullStdOutLogOutput \
       2>&1 | tee "$profile/smoke.log"

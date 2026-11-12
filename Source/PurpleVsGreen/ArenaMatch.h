@@ -68,6 +68,9 @@ public:
     float MasterVolume = 0.7f;
     int PlayerHits = 0;
     int PlayerDamageEvents = 0;
+    int PlayerComets = 0;
+    int PlayerCometImpacts = 0;
+    int PlayerWards = 0;
     double LastPlayerHitAt = -10.;
     double LastPlayerHurtAt = -10.;
 

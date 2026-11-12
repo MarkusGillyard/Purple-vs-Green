@@ -211,6 +211,7 @@ void AArenaSoldier::Ward()
 {
     if (Arena && Arena->IsPlaying() && Rules.Ward(GetWorld()->GetTimeSeconds()))
     {
+        Arena->PlayerWards += this == Arena->PlayerSoldier();
         Arena->ShowWard(this);
         Arena->Feedback(Eye(), 6);
     }

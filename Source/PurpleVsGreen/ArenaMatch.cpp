@@ -301,6 +301,9 @@ void AArenaMatch::StartMatch()
     const double Now = GetWorld()->GetTimeSeconds();
     PlayerHits = 0;
     PlayerDamageEvents = 0;
+    PlayerComets = 0;
+    PlayerCometImpacts = 0;
+    PlayerWards = 0;
     NavigationRecoveries = 0;
     Respawns = 0;
     LastPlayerHitAt = -10.;
@@ -347,8 +350,9 @@ void AArenaMatch::Finish()
     const int Opposing = Rules.Score[PvG::Index(PvG::EnemyOf(ChosenTeam))];
     Feedback(FVector::ZeroVector, Own == Opposing ? 12 : Own > Opposing ? 10 : 11, .74f);
     UE_LOG(LogTemp, Display,
-        TEXT("PvG round result: Purple %d Green %d Player hits %d Player damage %d Respawns %d Route recoveries %d"),
-        Rules.Score[0], Rules.Score[1], PlayerHits, PlayerDamageEvents, Respawns, NavigationRecoveries);
+        TEXT("PvG round result: Purple %d Green %d Player hits %d Player damage %d Respawns %d Route recoveries %d Wards %d Comets %d Comet impacts %d"),
+        Rules.Score[0], Rules.Score[1], PlayerHits, PlayerDamageEvents, Respawns, NavigationRecoveries,
+        PlayerWards, PlayerComets, PlayerCometImpacts);
 }
 
 void AArenaMatch::Tick(float DeltaSeconds)
@@ -461,9 +465,12 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
 
     if (Spec.ProjectileSpeed > 0.f)
     {
+        const bool Player = Caster == PlayerSoldier();
+        PlayerComets += Player;
         FHitResult Obstruction;
         if (Trace(From, From + Direction * 45., Caster, Obstruction))
         {
+            PlayerCometImpacts += Player;
             Explode(Caster, Obstruction.ImpactPoint + Obstruction.ImpactNormal * 4.);
             return;
         }
@@ -511,6 +518,7 @@ void AArenaMatch::UpdateMissiles(float DeltaSeconds)
         Missile.DistanceLeft -= Step;
         if (Blocked || Missile.DistanceLeft <= 0.f)
         {
+            PlayerCometImpacts += Blocked && Missile.Caster.Get() == PlayerSoldier();
             Explode(Missile.Caster.Get(), Blocked ? Impact.Location : Destination);
             if (Missile.Visual.IsValid())
                 Missile.Visual->Destroy();
