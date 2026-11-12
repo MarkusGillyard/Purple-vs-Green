@@ -32,6 +32,7 @@ AArenaSoldier::AArenaSoldier()
     Camera->SetFieldOfView(96.f);
 
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Box(TEXT("/Engine/BasicShapes/Cube.Cube"));
     auto Part = [&](FName Name, USceneComponent* Parent, FVector Location, FVector Scale, bool Color, bool Angular = false)
     {
@@ -64,20 +65,44 @@ AArenaSoldier::AArenaSoldier()
 
     CastingHands = CreateDefaultSubobject<USceneComponent>(TEXT("FirstPersonRig"));
     CastingHands->SetupAttachment(Camera);
-    const auto Hand = [&](FName Name, FVector Location, FVector Scale, float Yaw, bool Color)
+    auto GauntletPart = [&](FName Name, USceneComponent* Parent, UStaticMesh* Mesh, FVector Location,
+                            FVector Scale, FRotator Angle, bool Dyed)
     {
-        UStaticMeshComponent* Shape = AddPart(Name, CastingHands, Sphere.Object, Location, Scale);
-        Shape->SetRelativeRotation(FRotator(13, Yaw, 0));
+        UStaticMeshComponent* Shape = AddPart(Name, Parent, Mesh, Location, Scale);
+        Shape->SetRelativeRotation(Angle);
         Shape->SetOnlyOwnerSee(true);
         Shape->SetCastShadow(false);
-        (Color ? Livery : Armor).Add(Shape);
+        (Dyed ? Livery : Armor).Add(Shape);
     };
-    Hand(TEXT("RightSleeve"), {48, 29, -26}, {.45, .115, .10}, -19.f, false);
-    Hand(TEXT("RightGlove"), {66, 22, -22}, {.19, .103, .088}, -19.f, true);
-    Hand(TEXT("LeftSleeve"), {42, -29, -28}, {.42, .115, .10}, 22.f, false);
-    Hand(TEXT("LeftGlove"), {59, -23, -23}, {.18, .10, .085}, 22.f, true);
-    Hand(TEXT("RightKnuckles"), {73, 21, -21}, {.092, .090, .055}, -19.f, false);
-    Hand(TEXT("LeftKnuckles"), {66, -22, -22}, {.088, .086, .055}, 22.f, false);
+    for (const int Side : {-1, 1})
+    {
+        const bool Right = Side > 0;
+        const FString Prefix = Right ? TEXT("CastRight") : TEXT("CastLeft");
+        USceneComponent* Wrist = CreateDefaultSubobject<USceneComponent>(*Prefix);
+        Wrist->SetupAttachment(CastingHands);
+        Wrist->SetRelativeLocation(FVector(Right ? 61 : 55, Side * 23, Right ? -23 : -25));
+        Wrist->SetRelativeRotation(FRotator(8, Side * -18, Side * 12));
+        (Right ? CastingRight : CastingLeft) = Wrist;
+
+        auto Segment = [&](const TCHAR* Label, UStaticMesh* Mesh, FVector Location, FVector Scale,
+                           FRotator Angle, bool Dyed)
+        {
+            GauntletPart(FName(Prefix + Label), Wrist, Mesh, Location, Scale, Angle, Dyed);
+        };
+        Segment(TEXT("Sleeve"), Cylinder.Object, {-18, 0, -1}, {.153, .158, .46}, {90, 0, 0}, false);
+        Segment(TEXT("Cuff"), Cylinder.Object, {-5, 0, -.1}, {.157, .162, .071}, {90, 0, 0}, true);
+        Segment(TEXT("Palm"), Sphere.Object, {4.8, 0, 0}, {.179, .163, .090}, {0, 0, 0}, false);
+        Segment(TEXT("Plate"), Box.Object, {4, 0, 3.8}, {.122, .117, .018}, {0, 0, 0}, true);
+        Segment(TEXT("Seal"), Box.Object, {5, 0, 5.1}, {.040, .040, .016}, {0, 45, 0}, false);
+        Segment(TEXT("Thumb"), Sphere.Object, {7.0, Side * -7.0, -1.5}, {.089, .043, .046}, {5, Side * -28.f, 0}, false);
+        for (int Digit = 0; Digit < 4; ++Digit)
+        {
+            const float Length[] = {.091f, .116f, .103f, .077f};
+            const FString Name = FString::Printf(TEXT("Finger%d"), Digit);
+            Segment(*Name, Sphere.Object, {13.5, Side * (-4.7 + Digit * 3.06), -.8},
+                {Length[Digit], .029, .037}, {15, Side * (-4.f + Digit * 4.f), 0}, false);
+        }
+    }
 }
 
 UStaticMeshComponent* AArenaSoldier::AddPart(FName Name, USceneComponent* Parent, UStaticMesh* Mesh,
@@ -224,6 +249,11 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
     const float WardRaise = Now < Rules.WardUntil ? 7.f : 0.f;
     CastingHands->SetRelativeLocation({CastWeight * 12.f, Pace * FMath::Sin(Stride) * 1.3f, Lift * 1.1f + CastWeight * 6.f + WardRaise});
     CastingHands->SetRelativeRotation(FRotator(-CastWeight * 6.f + HitWeight * 3.f, 0, Lift * .6f));
+    const float Opening = Rules.Charging ? 17.f : 0.f;
+    const float Fan = Rules.ActiveSpell == PvG::Spell::Fan ? CastWeight * 9.f : 0.f;
+    const float Lance = Rules.ActiveSpell == PvG::Spell::Lance ? CastWeight * 9.f : 0.f;
+    CastingRight->SetRelativeRotation(FRotator(8.f + Opening + Fan, -18.f + CastWeight * 11.f, 12.f));
+    CastingLeft->SetRelativeRotation(FRotator(8.f + WardRaise * 3.5f + Lance, 18.f - Lance, -12.f));
     Camera->SetFieldOfView(FMath::FInterpTo(Camera->FieldOfView,
         Rules.Charging && Rules.ActiveSpell == PvG::Spell::Lance ? 74.f : (Speed > 635.f ? 102.f : 96.f), DeltaSeconds, 10.f));
 }

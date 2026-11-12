@@ -53,6 +53,8 @@ private:
     UPROPERTY() TObjectPtr<USceneComponent> RightLeg;
     UPROPERTY() TObjectPtr<USceneComponent> LeftLeg;
     UPROPERTY() TObjectPtr<USceneComponent> CastingHands;
+    UPROPERTY() TObjectPtr<USceneComponent> CastingRight;
+    UPROPERTY() TObjectPtr<USceneComponent> CastingLeft;
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Armor;
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Livery;
 };

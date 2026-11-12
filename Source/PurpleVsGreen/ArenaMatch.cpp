@@ -8,6 +8,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/StaticMeshActor.h"
@@ -102,22 +103,86 @@ void AArenaMatch::BuildArena()
         Mesh(Cube, Mat, FTransform(FRotator(0, Yaw, 0), Position, Dimensions / 100.), Solid);
     };
 
-    UMaterialInterface* Base = Material({.19f, .215f, .225f});
-    UMaterialInterface* Stone = Material({.34f, .36f, .39f});
-    UMaterialInterface* Slate = Material({.09f, .125f, .16f});
-    UMaterialInterface* Pale = Material({.53f, .58f, .62f});
-    UMaterialInterface* Brass = Material({.56f, .34f, .13f});
-    UMaterialInterface* Background = Material({.045f, .073f, .103f});
+    UMaterialInterface* Base = Material({.125f, .14f, .155f});
+    UMaterialInterface* Stone = Material({.235f, .226f, .213f});
+    UMaterialInterface* Slate = Material({.047f, .074f, .106f});
+    UMaterialInterface* Pale = Material({.36f, .37f, .34f});
+    UMaterialInterface* Brass = Material({.49f, .285f, .079f});
+    UMaterialInterface* Background = Material({.10f, .14f, .17f});
     Block({0, 0, -30}, {5800, 4440, 60}, Base);
-    Block({0, 0, -170}, {27000, 27000, 50}, Background, false);
+    Block({0, 0, -170}, {32000, 32000, 50}, Background, false);
 
-    for (int X = -6; X <= 6; ++X)
+    AActor* Detail = GetWorld()->SpawnActor<AActor>();
+    USceneComponent* Origin = NewObject<USceneComponent>(Detail);
+    Detail->SetRootComponent(Origin);
+    Origin->RegisterComponent();
+    auto Instances = [Detail, Origin, this](UMaterialInterface* Mat)
     {
-        for (int Y = -5; Y <= 5; ++Y)
+        UInstancedStaticMeshComponent* Batch = NewObject<UInstancedStaticMeshComponent>(Detail);
+        Batch->SetupAttachment(Origin);
+        Batch->SetStaticMesh(Cube);
+        Batch->SetMaterial(0, Mat);
+        Batch->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        Batch->SetCastShadow(false);
+        Batch->RegisterComponent();
+        return Batch;
+    };
+    auto Tile = [](UInstancedStaticMeshComponent* Batch, FVector Center, FVector Size, FRotator Angle = FRotator::ZeroRotator)
+    {
+        Batch->AddInstance(FTransform(Angle, Center, Size / 100.));
+    };
+    FRandomStream Pattern(5129);
+    UInstancedStaticMeshComponent* Pavers[3] = {
+        Instances(Material({.178f, .188f, .199f})), Instances(Material({.194f, .199f, .204f})),
+        Instances(Material({.156f, .17f, .181f}))
+    };
+    UInstancedStaticMeshComponent* Inlays = Instances(Brass);
+    UInstancedStaticMeshComponent* Moldings = Instances(Pale);
+    for (int Y = -9; Y <= 9; ++Y)
+    {
+        const double CenterY = Y * 225.;
+        for (int X = -9; X <= 9; ++X)
         {
-            const FVector Tile(X * 440., Y * 400., -1.);
-            Block(Tile, {432, 392, 2}, (X + Y) % 2 == 0 ? Base : Stone, false);
+            const double CenterX = X * 303. + (Y % 2 ? 70. : -70.);
+            Tile(Pavers[Pattern.RandRange(0, 2)], {CenterX, CenterY, .34}, {299, 221, .68});
         }
+    }
+    for (const int Side : {-1, 1})
+    {
+        for (int Bay = -7; Bay <= 7; ++Bay)
+        {
+            const double X = Bay * 378.;
+            const double Y = Side * 2156.;
+            Tile(Moldings, {X, Y, 182}, {340, 16, 236});
+            Tile(Inlays, {X, Y - Side * 10., 77}, {322, 8, 9});
+            Tile(Inlays, {X, Y - Side * 10., 289}, {322, 8, 9});
+            Tile(Inlays, {X, Y - Side * 10., 189}, {24, 8, 24}, FRotator(45, 0, 0));
+        }
+        for (int Span = -2; Span <= 2; ++Span)
+        {
+            const double Y = Span * 830. + 415.;
+            const double X = Side * 2780.;
+            for (const int Leg : {-1, 1})
+            {
+                Tile(Moldings, {X, Y + Leg * 244., 104}, {28, 52, 208});
+                Tile(Inlays, {X - Side * 18., Y + Leg * 244., 200}, {15, 56, 16});
+            }
+            for (int Segment = 0; Segment <= 12; ++Segment)
+            {
+                const double Angle = Segment * UE_PI / 12.;
+                Tile(Segment == 6 ? Inlays : Moldings, {X, Y + 244. * FMath::Cos(Angle), 206. + 150. * FMath::Sin(Angle)},
+                    {35, 50, 43}, FRotator(0, 0, FMath::RadiansToDegrees(Angle)));
+            }
+        }
+    }
+    for (int Obelisk = 0; Obelisk < 14; ++Obelisk)
+    {
+        const double Angle = Obelisk * 2. * UE_PI / 14.;
+        const double Height = Pattern.FRandRange(720.f, 1960.f);
+        const FVector Axis(FMath::Cos(Angle), FMath::Sin(Angle), 0.);
+        const FVector Position = Axis * Pattern.FRandRange(5500.f, 8300.f);
+        Block(Position + FVector(0, 0, Height / 2. - 145.), {510, 450, Height}, Background, false, Obelisk * 24.f);
+        Block(Position + FVector(0, 0, Height - 125.), {570, 490, 43}, Slate, false, Obelisk * 24.f);
     }
 
     for (const int Side : {-1, 1})
@@ -196,10 +261,11 @@ void AArenaMatch::BuildArena()
         Light->SetIntensity(Intensity);
         Light->SetCastShadows(Shadows);
         Light->SetAtmosphereSunLight(Shadows);
+        Light->SetForwardShadingPriority(Shadows ? 1 : 0);
     };
-    Sun({-51, -35, 0}, {1.f, .83f, .66f}, 4.1f, true);
-    Sun({-49, 145, 0}, {.47f, .69f, 1.f}, 1.5f, false);
-    Sun({-18, 65, 0}, {.45f, .74f, 1.f}, 1.0f, false);
+    Sun({-51, -35, 0}, {1.f, .79f, .58f}, 2.4f, true);
+    Sun({-49, 145, 0}, {.47f, .69f, 1.f}, .9f, false);
+    Sun({-18, 65, 0}, {.45f, .74f, 1.f}, .65f, false);
 
     ACameraActor* Camera = GetWorld()->SpawnActor<ACameraActor>(FVector(-2090, -1940, 1340), FRotator(-21, 41, 0));
     Camera->GetCameraComponent()->SetFieldOfView(75.f);
