@@ -1,0 +1,18 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "Games",
+  "Description": "Purple vs Green, an offline fantasy arena shooter.",
+  "Modules": [
+    { "Name": "PurpleVsGreen", "Type": "Runtime", "LoadingPhase": "Default" }
+  ],
+  "Plugins": [
+    { "Name": "AndroidFileServer", "Enabled": false },
+    { "Name": "OnlineSubsystem", "Enabled": false },
+    { "Name": "OnlineSubsystemNull", "Enabled": false },
+    { "Name": "OnlineSubsystemUtils", "Enabled": false },
+    { "Name": "UdpMessaging", "Enabled": false },
+    { "Name": "TcpMessaging", "Enabled": false }
+  ],
+  "TargetPlatforms": [ "Linux" ]
+}
