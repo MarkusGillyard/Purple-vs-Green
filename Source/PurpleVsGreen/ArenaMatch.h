@@ -11,6 +11,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
 class USoundAttenuation;
+class UInstancedStaticMeshComponent;
 
 struct FArenaBot
 {
@@ -36,6 +37,24 @@ struct FArenaMissile
     FVector Location;
     FVector Direction;
     float DistanceLeft = 0.f;
+    float TrailElapsed = 0.f;
+};
+
+struct FArenaMote
+{
+    FVector Position;
+    FVector Velocity;
+    float Age = 0.f;
+    float Lifetime = 0.f;
+    float Size = 0.f;
+};
+
+struct FArenaMotePool
+{
+    TArray<FArenaMote> Items;
+    TArray<FTransform> Transforms;
+    int Next = 0;
+    bool Visible = false;
 };
 
 UCLASS()
@@ -79,6 +98,9 @@ private:
     void BuildArena();
     void BuildRoutes();
     void BuildSounds();
+    void BuildMotes();
+    void EmitMotes(int Batch, FVector Location, FVector Axis, int Count, float Spread, float Speed);
+    void UpdateMotes(float DeltaSeconds);
     void ClearRound();
     void ViewOverview() const;
     void UpdateBot(int Index, float DeltaSeconds, double Now);
@@ -103,6 +125,12 @@ private:
     UPROPERTY() TObjectPtr<UStaticMesh> Cylinder;
     UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
     UPROPERTY() TObjectPtr<UMaterialInterface> SpellMaterial;
+    UPROPERTY() TObjectPtr<UMaterialInterface> Masonry;
+    UPROPERTY() TObjectPtr<UMaterialInterface> RidgeMaterial;
+    UPROPERTY() TObjectPtr<UStaticMesh> RidgeMesh;
+    UPROPERTY() TObjectPtr<UStaticMesh> CrystalMesh;
+    UPROPERTY() TObjectPtr<UStaticMesh> ReedsMesh;
+    UPROPERTY() TObjectPtr<AActor> MeridianCore;
     UPROPERTY() TArray<TObjectPtr<AArenaSoldier>> Soldiers;
     UPROPERTY() TObjectPtr<USoundAttenuation> SpatialAudio;
     TArray<TArray<uint8>> SoundSamples;
@@ -114,4 +142,7 @@ private:
     TArray<TArray<int>> Links;
     TArray<FVector> Spawns[2];
     FRandomStream Random{8119};
+    FRandomStream EffectsRandom{2573};
+    UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> MoteMeshes;
+    FArenaMotePool MotePools[5];
 };

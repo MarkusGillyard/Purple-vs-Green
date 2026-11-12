@@ -41,7 +41,8 @@ private:
     void Release();
     void Animate(float DeltaSeconds, double Now);
     void SetTeamAppearance();
-    void UpdateArmorPose(float Speed, float Swing, float Casting, float Ward, float Hit, float AimPitch);
+    void AnimateDefeat(double Now);
+    void UpdateArmorPose(FVector LocalVelocity, float Cadence, float Pace, float Flight, float Hit, float AimPitch);
     FRotator Aim = FRotator::ZeroRotator;
     double ReleaseAt = 0.;
     double LastCast = -10.;
@@ -50,7 +51,15 @@ private:
     float Stride = 0.f;
     float PoseCast = 0.f;
     float PoseWard = 0.f;
-    TArray<FQuat> ComponentReferenceRotations;
+    float AirPose = 0.f;
+    float Landing = 0.f;
+    float HitSide = 1.f;
+    bool WasAirborne = false;
+    bool HasViewHistory = false;
+    FRotator LastView = FRotator::ZeroRotator;
+    FVector2D ViewSway = FVector2D::ZeroVector;
+    TArray<FTransform> ComponentReference;
+    TArray<FTransform> PoseComponents;
 
     UPROPERTY() TObjectPtr<AArenaMatch> Arena;
     UPROPERTY() TObjectPtr<UCameraComponent> Camera;
@@ -61,4 +70,6 @@ private:
     UPROPERTY() TObjectPtr<USceneComponent> CastingLeft;
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Armor;
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Livery;
+    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Trim;
+    UPROPERTY() TArray<TObjectPtr<USceneComponent>> Digits;
 };

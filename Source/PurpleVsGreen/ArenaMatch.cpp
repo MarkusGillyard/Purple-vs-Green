@@ -7,10 +7,16 @@
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/SkyLightComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/DirectionalLight.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "Engine/PointLight.h"
+#include "Engine/SkyLight.h"
 #include "Engine/StaticMeshActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -44,6 +50,16 @@ AArenaMatch::AArenaMatch()
     BaseMaterial = ColorAsset.Object;
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> Aether(TEXT("/Game/Materials/M_Aether.M_Aether"));
     SpellMaterial = Aether.Object;
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Stone(TEXT("/Game/Materials/M_MeridianMasonry.M_MeridianMasonry"));
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Ridge(TEXT("/Game/Materials/M_MeridianRidge.M_MeridianRidge"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Mountains(TEXT("/Game/Meridian/SM_MeridianRidge.SM_MeridianRidge"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Crystal(TEXT("/Game/Meridian/SM_MeridianCrystal.SM_MeridianCrystal"));
+    Masonry = Stone.Object;
+    RidgeMaterial = Ridge.Object;
+    RidgeMesh = Mountains.Object;
+    CrystalMesh = Crystal.Object;
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Reeds(TEXT("/Game/Meridian/SM_MeridianReeds.SM_MeridianReeds"));
+    ReedsMesh = Reeds.Object;
 }
 
 void AArenaMatch::StartPlay()
@@ -52,6 +68,7 @@ void AArenaMatch::StartPlay()
     BuildArena();
     BuildRoutes();
     BuildSounds();
+    BuildMotes();
     LocalController = Cast<AArenaController>(GetWorld()->GetFirstPlayerController());
     if (LocalController)
     {
@@ -98,31 +115,44 @@ AActor* AArenaMatch::Mesh(UStaticMesh* Shape, UMaterialInterface* Material,
 
 void AArenaMatch::BuildArena()
 {
-    auto Material = [this](FLinearColor Tint) { return Paint(this, Tint); };
+    auto Material = [this](FLinearColor Tint, float Period = 385.f, float Relief = .83f,
+                           float Metal = 0.f, float Roughness = .89f)
+    {
+        UMaterialInstanceDynamic* Surface = UMaterialInstanceDynamic::Create(Masonry ? Masonry : BaseMaterial, this);
+        Surface->SetVectorParameterValue(TEXT("Color"), Tint);
+        Surface->SetScalarParameterValue(TEXT("SurfaceScale"), Period);
+        Surface->SetScalarParameterValue(TEXT("Relief"), Relief);
+        Surface->SetScalarParameterValue(TEXT("Metallic"), Metal);
+        Surface->SetScalarParameterValue(TEXT("Roughness"), Roughness);
+        return Surface;
+    };
     auto Block = [this](FVector Position, FVector Dimensions, UMaterialInterface* Mat,
                         bool Solid = true, float Yaw = 0.f)
     {
         Mesh(Cube, Mat, FTransform(FRotator(0, Yaw, 0), Position, Dimensions / 100.), Solid);
     };
 
-    UMaterialInterface* Base = Material({.125f, .14f, .155f});
-    UMaterialInterface* Stone = Material({.235f, .226f, .213f});
-    UMaterialInterface* Slate = Material({.047f, .074f, .106f});
-    UMaterialInterface* Pale = Material({.36f, .37f, .34f});
-    UMaterialInterface* Brass = Material({.49f, .285f, .079f});
-    UMaterialInterface* Background = Material({.10f, .14f, .17f});
+    UMaterialInterface* Base = Material({.092f, .107f, .116f}, 450.f);
+    UMaterialInterface* Stone = Material({.245f, .228f, .198f}, 290.f, 1.0f);
+    UMaterialInterface* Slate = Material({.112f, .139f, .154f}, 320.f, .92f);
+    UMaterialInterface* Pale = Material({.327f, .291f, .236f}, 165.f, .85f);
+    UMaterialInterface* Brass = Material({.49f, .318f, .131f}, 130.f, .5f, .7f, .56f);
+    UMaterialInterface* Background = Material({.10f, .14f, .17f}, 700.f);
     Block({0, 0, -30}, {5800, 4440, 60}, Base);
-    Block({0, 0, -170}, {32000, 32000, 50}, Background, false);
+    if (RidgeMesh && RidgeMaterial)
+        Mesh(RidgeMesh, RidgeMaterial, FTransform::Identity, false);
+    else
+        Block({0, 0, -170}, {32000, 32000, 50}, Background, false);
 
     AActor* Detail = GetWorld()->SpawnActor<AActor>();
     USceneComponent* Origin = NewObject<USceneComponent>(Detail);
     Detail->SetRootComponent(Origin);
     Origin->RegisterComponent();
-    auto Instances = [Detail, Origin, this](UMaterialInterface* Mat)
+    auto Instances = [Detail, Origin, this](UMaterialInterface* Mat, UStaticMesh* Shape = nullptr)
     {
         UInstancedStaticMeshComponent* Batch = NewObject<UInstancedStaticMeshComponent>(Detail);
         Batch->SetupAttachment(Origin);
-        Batch->SetStaticMesh(Cube);
+        Batch->SetStaticMesh(Shape ? Shape : Cube.Get());
         Batch->SetMaterial(0, Mat);
         Batch->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         Batch->SetCastShadow(false);
@@ -135,11 +165,29 @@ void AArenaMatch::BuildArena()
     };
     FRandomStream Pattern(5129);
     UInstancedStaticMeshComponent* Pavers[3] = {
-        Instances(Material({.178f, .188f, .199f})), Instances(Material({.194f, .199f, .204f})),
-        Instances(Material({.156f, .17f, .181f}))
+        Instances(Material({.237f, .218f, .183f}, 255.f, .80f)),
+        Instances(Material({.225f, .222f, .202f}, 295.f, .73f)),
+        Instances(Material({.191f, .201f, .194f}, 270.f, .76f))
     };
     UInstancedStaticMeshComponent* Inlays = Instances(Brass);
     UInstancedStaticMeshComponent* Moldings = Instances(Pale);
+    UInstancedStaticMeshComponent* Glyphs = Instances(Paint(this, {.18f, .53f, .68f}, true));
+    if (ReedsMesh && RidgeMaterial)
+    {
+        UInstancedStaticMeshComponent* Reeds = Instances(RidgeMaterial, ReedsMesh);
+        FRandomStream Foliage(924);
+        for (const int Side : {-1, 1})
+        {
+            for (int Patch = 0; Patch < 28; ++Patch)
+            {
+                const double X = Foliage.FRandRange(-2630.f, 2630.f);
+                const double Y = Side * Foliage.FRandRange(2098.f, 2134.f);
+                const double Scale = Foliage.FRandRange(.28f, .80f);
+                Reeds->AddInstance(FTransform(FRotator(0, Foliage.FRandRange(0.f, 360.f), 0),
+                    FVector(X, Y, .6), FVector(Scale)));
+            }
+        }
+    }
     for (int Y = -9; Y <= 9; ++Y)
     {
         const double CenterY = Y * 225.;
@@ -155,10 +203,13 @@ void AArenaMatch::BuildArena()
         {
             const double X = Bay * 378.;
             const double Y = Side * 2156.;
-            Tile(Moldings, {X, Y, 182}, {340, 16, 236});
-            Tile(Inlays, {X, Y - Side * 10., 77}, {322, 8, 9});
-            Tile(Inlays, {X, Y - Side * 10., 289}, {322, 8, 9});
-            Tile(Inlays, {X, Y - Side * 10., 189}, {24, 8, 24}, FRotator(45, 0, 0));
+            Tile(Moldings, {X, Y, 69}, {340, 26, 96});
+            Tile(Moldings, {X, Y, 191}, {328, 19, 132});
+            Tile(Moldings, {X, Y, 288}, {340, 30, 43});
+            Tile(Inlays, {X, Y - Side * 16., 122}, {326, 8, 7});
+            Tile(Inlays, {X, Y - Side * 16., 271}, {326, 8, 7});
+            Tile(Moldings, {X + 181., Y - Side * 10., 169}, {23, 24, 310});
+            Tile(Inlays, {X, Y - Side * 18., 195}, {26, 7, 26}, FRotator(45, 0, 0));
         }
         for (int Span = -2; Span <= 2; ++Span)
         {
@@ -199,11 +250,14 @@ void AArenaMatch::BuildArena()
         {
             const double Y = Arch * 830.;
             Block({Side * 2820., Y, 235}, {160, 147, 470}, Stone);
-            Block({Side * 2732., Y, 275}, {13, 80, 240}, Banner, false);
+            Block({Side * 2810., Y, 36}, {195, 195, 72}, Pale, false);
+            Block({Side * 2810., Y, 450}, {188, 189, 32}, Pale, false);
+            Block({Side * 2730., Y, 277}, {19, 102, 239}, Slate, false);
+            Block({Side * 2716., Y, 275}, {13, 80, 220}, Banner, false);
             const FRotator Emblem(Side < 0 ? 45.f : 0.f, 0, Side < 0 ? 0.f : 45.f);
-            Mesh(Cube, Brass, FTransform(Emblem, FVector(Side * 2723., Y, 329), FVector(.11, .42, .42)), false);
+            Mesh(Cube, Brass, FTransform(Emblem, FVector(Side * 2707., Y, 329), FVector(.11, .42, .42)), false);
             if (Side > 0)
-                Block({Side * 2723., Y, 291}, {11, 42, 10}, Brass, false);
+                Block({Side * 2707., Y, 291}, {11, 42, 10}, Brass, false);
         }
 
         for (const int Wing : {-1, 1})
@@ -211,7 +265,12 @@ void AArenaMatch::BuildArena()
             const double Y = Wing * 1280.;
             Block({Side * 1450., Y, 152}, {550, 222, 304}, Stone);
             Block({Side * 1450., Y, 309}, {585, 250, 36}, Slate);
-            Block({Side * 1450., Y + Wing * 123., 219}, {425, 24, 61}, Brass, false);
+            Block({Side * 1450., Y, 29}, {574, 244, 58}, Slate, false);
+            Block({Side * 1450., Y + Wing * 116., 218}, {468, 20, 108}, Slate, false);
+            Block({Side * 1450., Y + Wing * 128., 175}, {434, 9, 8}, Brass, false);
+            Block({Side * 1450., Y + Wing * 128., 261}, {434, 9, 8}, Brass, false);
+            for (const int Edge : {-1, 1})
+                Block({Side * 1450. + Edge * 235., Y + Wing * 118., 158}, {26, 25, 246}, Pale, false);
             Block({Side * 2110., Wing * 830., 67}, {425, 168, 134}, Slate);
             Block({Side * 2110., Wing * 830., 138}, {443, 183, 22}, Banner, false);
             Block({Side * 630., Wing * 1740., 89}, {223, 365, 178}, Stone);
@@ -245,15 +304,55 @@ void AArenaMatch::BuildArena()
         Block(Axis * 760. + FVector(0, 0, 3), {240, 12, 4}, Brass, false, Pillar * 45.f);
         Block(Axis * 1000. + FVector(0, 0, 3), {120, 6, 4}, Pale, false, Pillar * 45.f);
     }
-    Mesh(Sphere, Pale, FTransform(FRotator::ZeroRotator, FVector(0, 0, 614), FVector(1.54, 1.54, 1.54)), false);
-    for (int Segment = 0; Segment < 24; ++Segment)
+    UMaterialInterface* CrystalSurface = Material({.115f, .306f, .38f}, 110.f, .16f, .34f, .37f);
+    MeridianCore = Mesh(CrystalMesh ? CrystalMesh.Get() : Sphere.Get(), CrystalSurface,
+        FTransform(FRotator(12, 0, 0), FVector(0, 0, 590), FVector(1.34)), false);
+    const FRotator RingAngles[] = {{0, 0, 0}, {38, 26, 0}, {-39, -26, 16}};
+    const double RingRadii[] = {232., 198., 174.};
+    for (int Ring = 0; Ring < UE_ARRAY_COUNT(RingAngles); ++Ring)
     {
-        const double Angle = Segment * UE_PI / 12.;
-        const FVector Point(FMath::Cos(Angle) * 204., FMath::Sin(Angle) * 204., 614.);
-        Block(Point, {55, 14, 15}, Brass, false, Segment * 15.f + 90.f);
+        for (int Segment = 0; Segment < 40; ++Segment)
+        {
+            const double Theta = Segment * UE_PI / 20.;
+            const FQuat Plane = RingAngles[Ring].Quaternion();
+            const FVector Point = Plane.RotateVector({FMath::Cos(Theta) * RingRadii[Ring],
+                FMath::Sin(Theta) * RingRadii[Ring], 0.}) + FVector(0, 0, 590);
+            const FQuat Direction = Plane * FRotator(0, Segment * 9. + 90., 0).Quaternion();
+            Tile(Inlays, Point, {RingRadii[Ring] * .16, 11, 13}, Direction.Rotator());
+            if (Segment % 5 == 0)
+                Tile(Glyphs, Point, {19, 14, 15}, Direction.Rotator());
+        }
+    }
+    auto Lantern = [this](FVector Position, FLinearColor Tint, float Intensity, float Radius)
+    {
+        APointLight* Lamp = GetWorld()->SpawnActor<APointLight>(Position, FRotator::ZeroRotator);
+        UPointLightComponent* Light = CastChecked<UPointLightComponent>(Lamp->GetLightComponent());
+        Light->SetMobility(EComponentMobility::Movable);
+        Light->SetLightColor(Tint);
+        Light->SetIntensity(Intensity);
+        Light->SetAttenuationRadius(Radius);
+        Light->SetCastShadows(false);
+    };
+    Lantern({0, 0, 590}, {.21f, .61f, .83f}, 135.f, 1080.f);
+    for (const int Side : {-1, 1})
+    {
+        for (const int Wing : {-1, 1})
+        {
+            const FVector BasePoint(Side * 2240., Wing * 2045., 0);
+            Block(BasePoint + FVector(0, 0, 43), {76, 76, 86}, Slate, false);
+            Block(BasePoint + FVector(0, 0, 94), {70, 70, 14}, Brass, false);
+            Block(BasePoint + FVector(0, 0, 113), {29, 29, 26}, Paint(this, {.78f, .25f, .051f}, true), false);
+            Lantern(BasePoint + FVector(0, 0, 146), {1.f, .42f, .13f}, 80.f, 580.f);
+        }
     }
 
     GetWorld()->SpawnActor<ASkyAtmosphere>();
+    AExponentialHeightFog* Mist = GetWorld()->SpawnActor<AExponentialHeightFog>(
+        FVector(0, 0, -850), FRotator::ZeroRotator);
+    Mist->GetComponent()->SetFogDensity(.027f);
+    Mist->GetComponent()->SetFogHeightFalloff(.12f);
+    Mist->GetComponent()->SetFogInscatteringColor({.28f, .39f, .47f});
+    Mist->GetComponent()->SetStartDistance(1800.f);
     auto Sun = [this](FRotator Angle, FLinearColor Tint, float Intensity, bool Shadows)
     {
         ADirectionalLight* Lamp = GetWorld()->SpawnActor<ADirectionalLight>(FVector::ZeroVector, Angle);
@@ -265,9 +364,15 @@ void AArenaMatch::BuildArena()
         Light->SetAtmosphereSunLight(Shadows);
         Light->SetForwardShadingPriority(Shadows ? 1 : 0);
     };
-    Sun({-51, -35, 0}, {1.f, .79f, .58f}, 2.4f, true);
-    Sun({-49, 145, 0}, {.47f, .69f, 1.f}, .9f, false);
-    Sun({-18, 65, 0}, {.45f, .74f, 1.f}, .65f, false);
+    Sun({-35, -31, 0}, {1.f, .83f, .65f}, 3.05f, true);
+    Sun({-42, 152, 0}, {.53f, .72f, 1.f}, 1.22f, false);
+    Sun({-24, 62, 0}, {.58f, .72f, .89f}, .86f, false);
+    ASkyLight* Sky = GetWorld()->SpawnActor<ASkyLight>();
+    USkyLightComponent* Ambient = Sky->GetLightComponent();
+    Ambient->SetMobility(EComponentMobility::Movable);
+    Ambient->SetIntensity(.72f);
+    Ambient->SetLightColor({.70f, .80f, .95f});
+    Ambient->RecaptureSky();
 
     ACameraActor* Camera = GetWorld()->SpawnActor<ACameraActor>(FVector(-2090, -1940, 1340), FRotator(-21, 41, 0));
     Camera->GetCameraComponent()->SetFieldOfView(75.f);
@@ -365,6 +470,13 @@ void AArenaMatch::Finish()
 void AArenaMatch::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    if (MeridianCore)
+    {
+        const double Time = GetWorld()->GetTimeSeconds();
+        MeridianCore->SetActorRotation(FRotator(12. + FMath::Sin(Time * .6) * 7., Time * 17., FMath::Cos(Time * .75) * 6.));
+        MeridianCore->SetActorLocation({0, 0, 590. + FMath::Sin(Time * 1.3) * 13.});
+    }
+    UpdateMotes(DeltaSeconds);
     if (!IsPlaying())
         return;
     const double Now = GetWorld()->GetTimeSeconds();
@@ -439,7 +551,9 @@ void AArenaMatch::Defeated(AArenaSoldier* Soldier, AArenaSoldier* Killer)
         return;
     ++Soldier->Defeats;
     ++Killer->Eliminations;
-    Spark(Soldier->GetActorLocation() + FVector(0, 0, 34), TeamTint(Soldier->Team), 58.f, .38f);
+    const FVector Dispel = Soldier->GetActorLocation() + FVector(0, 0, 37);
+    Spark(Dispel, TeamTint(Soldier->Team) * .65f, 28.f, .12f);
+    EmitMotes(4, Dispel, FVector::UpVector, 15, 1.7f, 187.f);
     Feedback(Soldier->GetActorLocation(), 5);
     if (!IsPlaying())
         Finish();
@@ -470,7 +584,8 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
     const FVector Hand = From + Direction * 55. + Direction.Rotation().RotateVector(FVector(0, 19, -21));
     const FLinearColor Tint = SpellTint(Spell);
     Feedback(From, PvG::Index(Spell), .58f);
-    Spark(Hand, Tint, 12.f + PvG::Index(Spell) * 3.f, .12f);
+    Spark(Hand, Tint, 5.f + PvG::Index(Spell) * 1.7f, .068f);
+    EmitMotes(PvG::Index(Spell), Hand, Direction, Spell == PvG::Spell::Thread ? 3 : 8, .38f, 215.f);
 
     if (Spec.ProjectileSpeed > 0.f)
     {
@@ -497,10 +612,16 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
         FHitResult Impact;
         const FVector End = From + Trajectory * Spec.Range;
         const bool Blocked = Trace(From, End, Caster, Impact);
-        Beam(Hand, Blocked ? Impact.ImpactPoint : End, Tint, Spell == PvG::Spell::Lance ? 8.f : 3.f, .09f);
+        const FVector Destination = Blocked ? Impact.ImpactPoint : End;
+        Beam(Hand, Destination, Tint, Spell == PvG::Spell::Lance ? 4.3f : 1.9f, .075f);
+        if (Spell == PvG::Spell::Lance)
+            Beam(Hand, Destination, Tint * .44f, 9.5f, .036f);
         if (Blocked)
         {
-            Spark(Impact.ImpactPoint, Tint, 8.f, .16f);
+            Spark(Impact.ImpactPoint + Impact.ImpactNormal * 2., Tint, 4.8f, .085f);
+            if (Ray == 0 || Ray == 3)
+                EmitMotes(PvG::Index(Spell), Impact.ImpactPoint + Impact.ImpactNormal * 4.,
+                    Impact.ImpactNormal, Spell == PvG::Spell::Thread ? 5 : 11, .91f, 246.f);
             if (AArenaSoldier* Target = Cast<AArenaSoldier>(Impact.GetActor()))
                 Hits.FindOrAdd(Target) += Spec.Damage;
         }
@@ -535,6 +656,12 @@ void AArenaMatch::UpdateMissiles(float DeltaSeconds)
         }
         else
         {
+            Missile.TrailElapsed += DeltaSeconds;
+            if (Missile.TrailElapsed >= .042f)
+            {
+                EmitMotes(PvG::Index(PvG::Spell::Comet), Missile.Location, -Missile.Direction, 3, .46f, 125.f);
+                Missile.TrailElapsed = 0.f;
+            }
             Missile.Location = Destination;
             if (Missile.Visual.IsValid())
                 Missile.Visual->SetActorLocation(Destination);
@@ -546,9 +673,11 @@ void AArenaMatch::Explode(AArenaSoldier* Caster, FVector Location)
 {
     const PvG::SpellSpec& Spec = PvG::Arsenal[PvG::Index(PvG::Spell::Comet)];
     const FLinearColor Tint = SpellTint(PvG::Spell::Comet);
-    Spark(Location, Tint, 74.f, .18f);
-    for (int Ray = 0; Ray < 10; ++Ray)
-        Beam(Location, Location + Random.VRand() * Random.FRandRange(120.f, 280.f), Tint, 5.f, .16f);
+    Spark(Location, Tint * .72f, 38.f, .105f);
+    EmitMotes(PvG::Index(PvG::Spell::Comet), Location, FVector::UpVector, 29, 2.85f, 510.f);
+    for (int Ray = 0; Ray < 6; ++Ray)
+        Beam(Location, Location + EffectsRandom.VRand() * EffectsRandom.FRandRange(96.f, 238.f),
+            Tint * .71f, 2.8f, .10f);
     Feedback(Location, 5, .84f);
     if (!Caster)
         return;
@@ -584,6 +713,7 @@ void AArenaMatch::ShowWard(const AArenaSoldier* Soldier)
 {
     const FVector Center = Soldier->GetActorLocation() + FVector(0, 0, 30);
     const FLinearColor Tint(.19f, .74f, .93f);
+    EmitMotes(4, Center + FVector(0, 0, 39), FVector::UpVector, 12, 1.45f, 148.f);
     for (int Segment = 0; Segment < 10; ++Segment)
     {
         const double A = Segment * UE_PI / 5.;

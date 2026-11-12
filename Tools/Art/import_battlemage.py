@@ -66,6 +66,7 @@ unreal.EditorAssetLibrary.save_loaded_asset(armor)
 
 aether = new_material("M_Aether")
 edit.delete_all_material_expressions(aether)
+aether.set_editor_property("used_with_instanced_static_meshes", True)
 aether.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
 emission = edit.create_material_expression(aether, unreal.MaterialExpressionMultiply, -120, -20)
 edit.connect_material_expressions(tint(aether, (.4, .77, 1)), "RGB", emission, "A")

@@ -36,6 +36,7 @@ AArenaSoldier::AArenaSoldier()
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Box(TEXT("/Engine/BasicShapes/Cube.Cube"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Vambrace(TEXT("/Game/Meridian/SM_MeridianVambrace.SM_MeridianVambrace"));
     static ConstructorHelpers::FObjectFinder<USkeletalMesh> Body(
         TEXT("/Game/Battlemage/SK_Battlemage.SK_Battlemage"));
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> Surface(
@@ -52,13 +53,13 @@ AArenaSoldier::AArenaSoldier()
     CastingHands = CreateDefaultSubobject<USceneComponent>(TEXT("FirstPersonRig"));
     CastingHands->SetupAttachment(Camera);
     auto GauntletPart = [&](FName Name, USceneComponent* Parent, UStaticMesh* Mesh, FVector Location,
-                            FVector Scale, FRotator Angle, bool Dyed)
+                            FVector Scale, FRotator Angle, bool Dyed, bool Metal = false)
     {
         UStaticMeshComponent* Shape = AddPart(Name, Parent, Mesh, Location, Scale);
         Shape->SetRelativeRotation(Angle);
         Shape->SetOnlyOwnerSee(true);
         Shape->SetCastShadow(false);
-        (Dyed ? Livery : Armor).Add(Shape);
+        (Metal ? Trim : Dyed ? Livery : Armor).Add(Shape);
     };
     for (const int Side : {-1, 1})
     {
@@ -71,22 +72,39 @@ AArenaSoldier::AArenaSoldier()
         (Right ? CastingRight : CastingLeft) = Wrist;
 
         auto Segment = [&](const TCHAR* Label, UStaticMesh* Mesh, FVector Location, FVector Scale,
-                           FRotator Angle, bool Dyed)
+                           FRotator Angle, bool Dyed, bool Metal = false)
         {
-            GauntletPart(FName(Prefix + Label), Wrist, Mesh, Location, Scale, Angle, Dyed);
+            GauntletPart(FName(Prefix + Label), Wrist, Mesh, Location, Scale, Angle, Dyed, Metal);
         };
-        Segment(TEXT("Sleeve"), Cylinder.Object, {-18, 0, -1}, {.153, .158, .46}, {90, 0, 0}, false);
-        Segment(TEXT("Cuff"), Cylinder.Object, {-5, 0, -.1}, {.157, .162, .071}, {90, 0, 0}, true);
-        Segment(TEXT("Palm"), Sphere.Object, {4.8, 0, 0}, {.179, .163, .090}, {0, 0, 0}, false);
-        Segment(TEXT("Plate"), Box.Object, {4, 0, 3.8}, {.122, .117, .018}, {0, 0, 0}, true);
-        Segment(TEXT("Seal"), Box.Object, {5, 0, 5.1}, {.040, .040, .016}, {0, 45, 0}, false);
-        Segment(TEXT("Thumb"), Sphere.Object, {7.0, Side * -7.0, -1.5}, {.089, .043, .046}, {5, Side * -28.f, 0}, false);
+        Segment(TEXT("Sleeve"), Cylinder.Object, {-18, 0, -2}, {.142, .147, .47}, {90, 0, 0}, false);
+        Segment(TEXT("Bracer"), Vambrace.Object, {-17, 0, -1.5}, {.34, .30, .36}, {90, 0, 0}, true);
+        Segment(TEXT("BracerSpine"), Box.Object, {-15, 0, 14.3}, {.22, .015, .014}, {0, 0, 0}, false, true);
+        for (const int Edge : {-1, 1})
+        {
+            const FString Rivet = FString::Printf(TEXT("BraceRivet%d"), Edge + 1);
+            Segment(*Rivet, Sphere.Object, {-6, Edge * 5.8, 11.7}, {.023, .023, .019},
+                FRotator::ZeroRotator, false, true);
+        }
+        Segment(TEXT("Cuff"), Cylinder.Object, {-5, 0, -1.3}, {.146, .152, .065}, {90, 0, 0}, false, true);
+        Segment(TEXT("CuffBinding"), Cylinder.Object, {-7.8, 0, -1.3}, {.147, .153, .015}, {90, 0, 0}, true);
+        Segment(TEXT("Palm"), Sphere.Object, {4.7, 0, 0}, {.151, .147, .077}, {0, 0, 0}, false);
+        Segment(TEXT("Plate"), Sphere.Object, {4.4, 0, 3.1}, {.127, .119, .034}, {0, 0, 0}, true);
+        Segment(TEXT("Seal"), Box.Object, {5, 0, 5.0}, {.034, .034, .014}, {0, 45, 0}, false, true);
+        Segment(TEXT("Thumb"), Sphere.Object, {6.7, Side * -6.8, -1.5}, {.084, .038, .043}, {5, Side * -28.f, 0}, false);
         for (int Digit = 0; Digit < 4; ++Digit)
         {
-            const float Length[] = {.091f, .116f, .103f, .077f};
-            const FString Name = FString::Printf(TEXT("Finger%d"), Digit);
-            Segment(*Name, Sphere.Object, {13.5, Side * (-4.7 + Digit * 3.06), -.8},
-                {Length[Digit], .029, .037}, {15, Side * (-4.f + Digit * 4.f), 0}, false);
+            const double Length[] = {6.8, 8.4, 7.7, 5.6};
+            const FString Name = Prefix + FString::Printf(TEXT("Finger%d"), Digit);
+            USceneComponent* Joint = CreateDefaultSubobject<USceneComponent>(*Name);
+            Joint->SetupAttachment(Wrist);
+            Joint->SetRelativeLocation({10.1, Side * (-4.7 + Digit * 3.03), -.4});
+            Digits.Add(Joint);
+            GauntletPart(FName(Name + TEXT("Leather")), Joint, Sphere.Object, {Length[Digit] * .4, 0, 0},
+                {Length[Digit] / 100., .028, .030}, FRotator::ZeroRotator, false);
+            GauntletPart(FName(Name + TEXT("Tip")), Joint, Sphere.Object, {Length[Digit] * .79, 0, -.7},
+                {Length[Digit] * .57 / 100., .024, .027}, FRotator(-14, 0, 0), false);
+            GauntletPart(FName(Name + TEXT("Knuckle")), Joint, Sphere.Object, {1.7, 0, 1.3},
+                {.039, .028, .021}, FRotator::ZeroRotator, false, true);
         }
     }
 }
@@ -113,42 +131,49 @@ void AArenaSoldier::Initialize(AArenaMatch* Match, PvG::Team Side, int InSlot)
     if (const USkeletalMesh* Body = Cast<USkeletalMesh>(Battlemage->GetSkinnedAsset()))
     {
         const FReferenceSkeleton& Skeleton = Body->GetRefSkeleton();
-        ComponentReferenceRotations.SetNum(Skeleton.GetNum());
+        ComponentReference.SetNum(Skeleton.GetNum());
+        PoseComponents.SetNum(Skeleton.GetNum());
         for (int Index = 0; Index < Skeleton.GetNum(); ++Index)
         {
-            const FQuat Local = Skeleton.GetRefBonePose()[Index].GetRotation();
+            const FTransform& Local = Skeleton.GetRefBonePose()[Index];
             const int Parent = Skeleton.GetParentIndex(Index);
-            ComponentReferenceRotations[Index] = Parent == INDEX_NONE ? Local : ComponentReferenceRotations[Parent] * Local;
+            ComponentReference[Index] = Parent == INDEX_NONE ? Local : Local * ComponentReference[Parent];
         }
     }
 }
 
 void AArenaSoldier::SetTeamAppearance()
 {
-    UMaterialInstanceDynamic* Steel = Arena->Paint(this, {0.092f, 0.118f, 0.147f});
-    UMaterialInstanceDynamic* Tint = Arena->Paint(this, AArenaMatch::TeamTint(Team));
-    for (UStaticMeshComponent* Part : Armor)
-        Part->SetMaterial(0, Steel);
-    for (UStaticMeshComponent* Part : Livery)
-        Part->SetMaterial(0, Tint);
-
-    if (!ArmorMaterial)
-        return;
-    const auto Surface = [this](FName MaterialSlot, FLinearColor Color, float Metallic, float Roughness)
+    const FLinearColor Dye = AArenaMatch::TeamTint(Team);
+    const auto Finish = [this](FLinearColor Color, float Metallic, float Roughness)
     {
-        if (const int Index = Battlemage->GetMaterialIndex(MaterialSlot); Index != INDEX_NONE)
-        {
-            UMaterialInstanceDynamic* Finish = UMaterialInstanceDynamic::Create(ArmorMaterial, Battlemage);
-            Finish->SetVectorParameterValue(TEXT("Color"), Color);
-            Finish->SetScalarParameterValue(TEXT("Metallic"), Metallic);
-            Finish->SetScalarParameterValue(TEXT("Roughness"), Roughness);
-            Battlemage->SetMaterial(Index, Finish);
-        }
+        if (!ArmorMaterial)
+            return Arena->Paint(this, Color);
+        UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(ArmorMaterial, this);
+        Material->SetVectorParameterValue(TEXT("Color"), Color);
+        Material->SetScalarParameterValue(TEXT("Metallic"), Metallic);
+        Material->SetScalarParameterValue(TEXT("Roughness"), Roughness);
+        return Material;
     };
-    Surface(TEXT("Obsidian"), {.105f, .14f, .183f}, .36f, .48f);
-    Surface(TEXT("Bronze"), {.57f, .32f, .10f}, .63f, .41f);
-    Surface(TEXT("Livery"), AArenaMatch::TeamTint(Team), .06f, .69f);
-    Surface(TEXT("Gaps"), {.033f, .041f, .056f}, .04f, .78f);
+    UMaterialInstanceDynamic* Leather = Finish({.064f, .076f, .084f}, .02f, .79f);
+    UMaterialInstanceDynamic* Enamel = Finish(Dye * .37f, .46f, .56f);
+    UMaterialInstanceDynamic* Bronze = Finish({.58f, .34f, .13f}, .68f, .40f);
+    for (UStaticMeshComponent* Part : Armor)
+        Part->SetMaterial(0, Leather);
+    for (UStaticMeshComponent* Part : Livery)
+        Part->SetMaterial(0, Enamel);
+    for (UStaticMeshComponent* Part : Trim)
+        Part->SetMaterial(0, Bronze);
+
+    const auto Surface = [this](FName Name, UMaterialInterface* Material)
+    {
+        if (const int Index = Battlemage->GetMaterialIndex(Name); Index != INDEX_NONE)
+            Battlemage->SetMaterial(Index, Material);
+    };
+    Surface(TEXT("Obsidian"), Finish({.12f, .145f, .169f}, .51f, .46f));
+    Surface(TEXT("Bronze"), Bronze);
+    Surface(TEXT("Livery"), Finish(Dye * .78f, .045f, .73f));
+    Surface(TEXT("Gaps"), Leather);
 }
 
 void AArenaSoldier::Respawn(const FTransform& Spawn)
@@ -158,6 +183,9 @@ void AArenaSoldier::Respawn(const FTransform& Spawn)
     SetActorTransform(Spawn, false, nullptr, ETeleportType::TeleportPhysics);
     SetAim(Spawn.Rotator());
     SetActorHiddenInGame(false);
+    CastingHands->SetVisibility(true, true);
+    Battlemage->SetRelativeLocation({0, 0, -90});
+    Battlemage->SetRelativeRotation(FRotator::ZeroRotator);
     SetActorEnableCollision(true);
     GetCharacterMovement()->StopMovementImmediately();
     GetCharacterMovement()->SetMovementMode(MOVE_Walking);
@@ -165,6 +193,13 @@ void AArenaSoldier::Respawn(const FTransform& Spawn)
     Stride = 0.f;
     PoseCast = 0.f;
     PoseWard = 0.f;
+    AirPose = 0.f;
+    Landing = 0.f;
+    WasAirborne = false;
+    HasViewHistory = false;
+    ViewSway = FVector2D::ZeroVector;
+    LastCast = -10.;
+    LastHit = -10.;
     LastStep = GetWorld()->GetTimeSeconds();
 }
 
@@ -225,12 +260,14 @@ bool AArenaSoldier::ReceiveSpell(AArenaSoldier* Caster, float Damage)
     if (Rules.Hit(Team, Caster->Team, Damage, Now) <= 0.f)
         return false;
     LastHit = Now;
+    const FVector Inward = (GetActorLocation() - Caster->GetActorLocation()).GetSafeNormal2D();
+    HitSide = FVector::DotProduct(GetActorRightVector(), Inward);
     Arena->MarkHit(Caster, this);
     if (Now < Rules.WardUntil)
         Arena->ShowWard(this);
     if (!Rules.Alive())
     {
-        SetActorHiddenInGame(true);
+        CastingHands->SetVisibility(false, true);
         SetActorEnableCollision(false);
         GetCharacterMovement()->DisableMovement();
         RespawnAt = LastHit + PvG::RespawnDelay;
@@ -242,74 +279,18 @@ bool AArenaSoldier::ReceiveSpell(AArenaSoldier* Caster, float Damage)
 void AArenaSoldier::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
-    if (!Arena || !Arena->IsPlaying() || !Rules.Alive())
+    if (!Arena)
         return;
     const double Now = GetWorld()->GetTimeSeconds();
+    if (!Rules.Alive())
+    {
+        AnimateDefeat(Now);
+        return;
+    }
+    if (!Arena->IsPlaying())
+        return;
     Rules.Refill(DeltaSeconds);
     if (Rules.Charging && Now >= ReleaseAt)
         Release();
     Animate(DeltaSeconds, Now);
-}
-
-void AArenaSoldier::Animate(float DeltaSeconds, double Now)
-{
-    const float Speed = GetVelocity().Size2D();
-    const float Pace = FMath::Clamp(Speed / 590.f, 0.f, 1.f);
-    Stride = FMath::Fmod(Stride + DeltaSeconds * (2.f + Speed / 62.f), 2.f * UE_PI);
-    const float Swing = 31.f * Pace * FMath::Sin(Stride);
-    const float CastWeight = Rules.Charging ? 1.f : FMath::Clamp(1.f - static_cast<float>(Now - LastCast) * 5.f, 0.f, 1.f);
-    const float HitWeight = FMath::Clamp(1.f - static_cast<float>(Now - LastHit) * 8.f, 0.f, 1.f);
-    const float TargetPitch = Controller ? Controller->GetControlRotation().Pitch : Aim.Pitch;
-    PoseCast = FMath::FInterpTo(PoseCast, CastWeight, DeltaSeconds, 18.f);
-    PoseWard = FMath::FInterpTo(PoseWard, Now < Rules.WardUntil ? 1.f : 0.f, DeltaSeconds, 15.f);
-    UpdateArmorPose(Speed, Swing, PoseCast, PoseWard, HitWeight, FRotator::NormalizeAxis(TargetPitch));
-    const float Lift = FMath::Cos(Stride * 2.f) * Pace;
-    if (Speed > 150.f && !GetCharacterMovement()->IsFalling() && Now >= LastStep)
-    {
-        Arena->Feedback(GetActorLocation(), 8, .22f);
-        LastStep = Now + FMath::GetMappedRangeValueClamped(FVector2D(150., 820.), FVector2D(.47, .27), Speed);
-    }
-    const float WardRaise = PoseWard * 7.f;
-    CastingHands->SetRelativeLocation({CastWeight * 12.f, Pace * FMath::Sin(Stride) * 1.3f, Lift * 1.1f + CastWeight * 6.f + WardRaise});
-    CastingHands->SetRelativeRotation(FRotator(-CastWeight * 6.f + HitWeight * 3.f, 0, Lift * .6f));
-    const float Opening = Rules.Charging ? 17.f : 0.f;
-    const float Fan = Rules.ActiveSpell == PvG::Spell::Fan ? CastWeight * 9.f : 0.f;
-    const float Lance = Rules.ActiveSpell == PvG::Spell::Lance ? CastWeight * 9.f : 0.f;
-    CastingRight->SetRelativeRotation(FRotator(8.f + Opening + Fan, -18.f + CastWeight * 11.f, 12.f));
-    CastingLeft->SetRelativeRotation(FRotator(8.f + WardRaise * 3.5f + Lance, 18.f - Lance, -12.f));
-    Camera->SetFieldOfView(FMath::FInterpTo(Camera->FieldOfView,
-        Rules.Charging && Rules.ActiveSpell == PvG::Spell::Lance ? 74.f : (Speed > 635.f ? 102.f : 96.f), DeltaSeconds, 10.f));
-}
-
-void AArenaSoldier::UpdateArmorPose(float Speed, float Swing, float Casting, float Ward, float Hit, float AimPitch)
-{
-    const USkeletalMesh* Body = Cast<USkeletalMesh>(Battlemage->GetSkinnedAsset());
-    if (!Body || Battlemage->BoneSpaceTransforms.Num() != ComponentReferenceRotations.Num())
-        return;
-
-    const FReferenceSkeleton& Skeleton = Body->GetRefSkeleton();
-    auto Rotate = [&](FName Name, FVector Axis, float Degrees)
-    {
-        const int Bone = Skeleton.FindBoneIndex(Name);
-        if (Bone == INDEX_NONE)
-            return;
-        const FQuat Reference = Skeleton.GetRefBonePose()[Bone].GetRotation();
-        const FVector LocalAxis = ComponentReferenceRotations[Bone].UnrotateVector(Axis);
-        Battlemage->BoneSpaceTransforms[Bone].SetRotation(Reference * FQuat(LocalAxis, FMath::DegreesToRadians(Degrees)));
-    };
-    const FVector Pitch = FVector::RightVector;
-    const bool Airborne = GetCharacterMovement()->IsFalling();
-    const float Run = FMath::Min(Speed / 590.f, 1.f);
-    Rotate(TEXT("Pelvis"), Pitch, Run * 5.f);
-    Rotate(TEXT("Chest"), Pitch, Run * 6.f - Hit * 15.f);
-    Rotate(TEXT("Head"), Pitch, -AimPitch * .61f + Hit * 10.f);
-    Rotate(TEXT("UpperArm_R"), Pitch, FMath::Lerp(Swing * -.68f - 13.f, -71.f - AimPitch * .65f, Casting));
-    Rotate(TEXT("UpperArm_L"), Pitch, Swing * .68f - 14.f - 50.f * Ward);
-    Rotate(TEXT("Forearm_R"), Pitch, -18.f - 24.f * Casting);
-    Rotate(TEXT("Forearm_L"), Pitch, -23.f - 54.f * Ward);
-    Rotate(TEXT("Thigh_R"), Pitch, Airborne ? -28.f : Swing);
-    Rotate(TEXT("Thigh_L"), Pitch, Airborne ? 11.f : -Swing);
-    Rotate(TEXT("Shin_R"), Pitch, Airborne ? 43.f : 7.f + FMath::Max(0.f, -Swing) * .77f);
-    Rotate(TEXT("Shin_L"), Pitch, Airborne ? 39.f : 7.f + FMath::Max(0.f, Swing) * .77f);
-    Battlemage->MarkRefreshTransformDirty();
 }
