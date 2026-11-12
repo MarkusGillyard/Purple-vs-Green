@@ -11,6 +11,12 @@ An offline fantasy arena shooter for Linux. Play 3v3 Team Deathmatch at the Meri
 | Q | Raise a ward |
 | Escape | Pause or resume |
 
+## Controller
+
+PlayStation and Xbox-style gamepads use Unreal's native gamepad input. On DualShock 4, the left stick moves, the right stick aims, L3 toggles sprint, and Cross jumps. R2 casts, L2 wards, L1 and R1 cycle spells, and Options pauses. In menus use the D-pad or left stick to move, Cross to confirm, and Circle to go back. Use left and right on a focused slider. Xbox-style equivalents are A, B, RT, LT, LB, RB and Menu.
+
+Settings include stick sensitivity, inverted vertical aim, and vibration. Vibration depends on controller and platform support.
+
 Focus recovers on its own. Witchthread is fast, Briar Fan is strongest up close, Glass Lance channels before releasing, and Cinder Comet bursts on contact. A ward reduces incoming damage briefly and has its own recharge time.
 
 ## Build and run

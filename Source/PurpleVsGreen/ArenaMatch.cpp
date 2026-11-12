@@ -464,6 +464,8 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
     if (!IsPlaying())
         return;
     const PvG::SpellSpec& Spec = PvG::Arsenal[PvG::Index(Spell)];
+    if (Caster == PlayerSoldier())
+        LocalController->PulseGamepad(Spell == PvG::Spell::Thread ? .13f : .29f, .11f);
     const FVector From = Caster->Eye();
     const FVector Hand = From + Direction * 55. + Direction.Rotation().RotateVector(FVector(0, 19, -21));
     const FLinearColor Tint = SpellTint(Spell);
@@ -574,6 +576,7 @@ void AArenaMatch::MarkHit(const AArenaSoldier* Caster, const AArenaSoldier* Vict
     {
         ++PlayerDamageEvents;
         LastPlayerHurtAt = Now;
+        LocalController->PulseGamepad(.44f, .18f);
     }
 }
 

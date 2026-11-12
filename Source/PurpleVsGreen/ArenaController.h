@@ -24,6 +24,8 @@ public:
     void ShowResults();
     bool IsMenuOpen() const { return Panel.IsValid(); }
     PvG::Spell GetSpell() const { return Selected; }
+    bool IsUsingGamepad() const { return UsingGamepad; }
+    void PulseGamepad(float Strength, float Seconds);
 
 private:
     enum class Screen : uint8 { Main, Pause, Settings, Results };
@@ -39,6 +41,21 @@ private:
     void MoveRight(float Amount);
     void LookYaw(float Amount);
     void LookPitch(float Amount);
+    void PadForward(float Amount);
+    void PadStrafe(float Amount);
+    void PadYaw(float Amount);
+    void PadPitch(float Amount);
+    void PadCastPressed();
+    void PadCastReleased();
+    void PadSprint();
+    void PadJump();
+    void PadWard();
+    void PadPause();
+    void PadPreviousSpell();
+    void PadNextSpell();
+    void CycleSpell(int Step);
+    void ApplySprint();
+    void DeviceConnectionChanged(EInputDeviceConnectionState State, FPlatformUserId User, FInputDeviceId Device);
     void PressCast();
     void ReleaseCast();
     void Sprint();
@@ -54,10 +71,18 @@ private:
 
     AArenaMatch* Match() const;
     TSharedPtr<SWidget> Panel;
+    TArray<TSharedRef<SWidget>> MenuFocus;
+    FDelegateHandle PadConnection;
     Screen Current = Screen::Main;
     Screen SettingsFrom = Screen::Main;
     PvG::Spell Selected = PvG::Spell::Thread;
     bool Casting = false;
+    bool PadCasting = false;
+    bool KeyboardSprinting = false;
+    bool PadSprinting = false;
+    bool UsingGamepad = false;
+    bool InvertPadPitch = false;
+    bool PadVibration = true;
     bool CastQueued = false;
     bool Smoke = false;
     int SmokeRound = 0;
@@ -68,4 +93,5 @@ private:
     TArray<float> FrameTimes;
     FString SmokeEvidence;
     float Sensitivity = 1.f;
+    float PadSensitivity = 1.f;
 };

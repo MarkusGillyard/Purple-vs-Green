@@ -66,13 +66,16 @@ void AArenaHud::DrawHUD()
         Left + 14.f * Unit, Bottom + 53.f * Unit, .93f, Paper);
     Meter(Left + 14.f * Unit, Bottom + 78.f * Unit, 207.f * Unit, 3.f * Unit,
         Player->Rules.Focus / PvG::FullFocus, FLinearColor(.23f, .70f, .86f));
+    const TCHAR* WardButton = Controller->IsUsingGamepad() ? TEXT("L2 / LT") : TEXT("Q");
     const FString Ward = Now < Player->Rules.WardUntil ? TEXT("WARD ACTIVE") :
-        Now < Player->Rules.WardReadyAt ? FString::Printf(TEXT("Q WARD   %.1fs"), Player->Rules.WardReadyAt - Now) :
-        TEXT("Q WARD READY");
+        Now < Player->Rules.WardReadyAt ? FString::Printf(TEXT("%s WARD   %.1fs"), WardButton, Player->Rules.WardReadyAt - Now) :
+        FString::Printf(TEXT("%s WARD READY"), WardButton);
     Label(Ward, Left + 14.f * Unit, Bottom + 86.f * Unit, .70f, Muted);
 
     const int Selected = PvG::Index(Controller->GetSpell());
     const float Right = Width - 262.f * Unit;
+    if (Controller->IsUsingGamepad())
+        Label(TEXT("L1 / R1   •   LB / RB"), Right + 13.f * Unit, Height - 180.f * Unit, .75f, Paper);
     for (int Spell = 0; Spell < PvG::Index(PvG::Spell::Count); ++Spell)
     {
         const float Y = Height - (160.f - 33.f * Spell) * Unit;
@@ -89,8 +92,9 @@ void AArenaHud::DrawHUD()
                 Meter(Right + 3.f * Unit, Y + 26.f * Unit, 232.f * Unit, 2.f * Unit, Ready, Tint);
             }
         }
-        Label(FString::Printf(TEXT("%d   %s"), Spell + 1, UTF8_TO_TCHAR(Spec.Name)),
-            Right + 13.f * Unit, Y + 5.f * Unit, .89f, Spell == Selected ? Paper : Muted);
+        const FString Name = Controller->IsUsingGamepad() ? FString(UTF8_TO_TCHAR(Spec.Name)) :
+            FString::Printf(TEXT("%d   %s"), Spell + 1, UTF8_TO_TCHAR(Spec.Name));
+        Label(Name, Right + 13.f * Unit, Y + 5.f * Unit, .89f, Spell == Selected ? Paper : Muted);
         Label(FString::Printf(TEXT("%.0f"), Spec.Cost), Right + 195.f * Unit, Y + 5.f * Unit, .83f,
             Player->Rules.Focus >= Spec.Cost ? Tint : Muted);
     }

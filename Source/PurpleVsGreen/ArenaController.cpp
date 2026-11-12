@@ -7,6 +7,9 @@
 #include "EngineUtils.h"
 #include "GameFramework/GameUserSettings.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/LocalPlayer.h"
+#include "GenericPlatform/GenericPlatformInputDeviceMapper.h"
+#include "GameFramework/PlayerInput.h"
 #include "InputCoreTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/CommandLine.h"
@@ -20,6 +23,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/SCompoundWidget.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
 
@@ -30,6 +34,40 @@ const FLinearColor Muted(.54f, .65f, .73f);
 const FLinearColor Accent(.44f, .75f, .77f);
 const FLinearColor PanelTint(.021f, .036f, .057f, .98f);
 constexpr const TCHAR* SettingsSection = TEXT("PurpleVsGreen.Player");
+
+class SArenaMenu final : public SCompoundWidget
+{
+public:
+    SLATE_BEGIN_ARGS(SArenaMenu) {}
+        SLATE_DEFAULT_SLOT(FArguments, Content)
+        SLATE_EVENT(FSimpleDelegate, OnBack)
+    SLATE_END_ARGS()
+
+    void Construct(const FArguments& Args)
+    {
+        OnBack = Args._OnBack;
+        ChildSlot[Args._Content.Widget];
+    }
+
+    FReply OnPreviewKeyDown(const FGeometry&, const FKeyEvent& Event) override
+    {
+        const FKey Key = Event.GetKey();
+        if (Key != EKeys::Gamepad_FaceButton_Right && Key != EKeys::Gamepad_Special_Right &&
+            Key != EKeys::Escape)
+            return FReply::Unhandled();
+        if (!Event.IsRepeat())
+            OnBack.ExecuteIfBound();
+        return FReply::Handled();
+    }
+
+private:
+    FSimpleDelegate OnBack;
+};
+
+float StickRate(float Axis, float Rate)
+{
+    return Axis * FMath::Lerp(.38f, 1.f, FMath::Square(Axis)) * Rate;
+}
 
 TSharedRef<STextBlock> Text(const FString& Label, int Size, FLinearColor Color = Paper, bool Heavy = false)
 {
@@ -83,6 +121,12 @@ void AArenaController::BeginPlay()
     Super::BeginPlay();
     GConfig->GetFloat(SettingsSection, TEXT("Sensitivity"), Sensitivity, GGameUserSettingsIni);
     Sensitivity = FMath::Clamp(Sensitivity, .3f, 2.4f);
+    GConfig->GetFloat(SettingsSection, TEXT("PadSensitivity"), PadSensitivity, GGameUserSettingsIni);
+    PadSensitivity = FMath::Clamp(PadSensitivity, .35f, 2.5f);
+    GConfig->GetBool(SettingsSection, TEXT("InvertPadPitch"), InvertPadPitch, GGameUserSettingsIni);
+    GConfig->GetBool(SettingsSection, TEXT("PadVibration"), PadVibration, GGameUserSettingsIni);
+    PadConnection = IPlatformInputDeviceMapper::Get().GetOnInputDeviceConnectionChange()
+        .AddUObject(this, &AArenaController::DeviceConnectionChanged);
     if (AArenaMatch* Arena = Match())
     {
         GConfig->GetFloat(SettingsSection, TEXT("Volume"), Arena->MasterVolume, GGameUserSettingsIni);
@@ -94,6 +138,7 @@ void AArenaController::BeginPlay()
 
 void AArenaController::EndPlay(const EEndPlayReason::Type Reason)
 {
+    IPlatformInputDeviceMapper::Get().GetOnInputDeviceConnectionChange().Remove(PadConnection);
     Hide();
     Super::EndPlay(Reason);
 }
@@ -101,6 +146,9 @@ void AArenaController::EndPlay(const EEndPlayReason::Type Reason)
 void AArenaController::SaveSettings() const
 {
     GConfig->SetFloat(SettingsSection, TEXT("Sensitivity"), Sensitivity, GGameUserSettingsIni);
+    GConfig->SetFloat(SettingsSection, TEXT("PadSensitivity"), PadSensitivity, GGameUserSettingsIni);
+    GConfig->SetBool(SettingsSection, TEXT("InvertPadPitch"), InvertPadPitch, GGameUserSettingsIni);
+    GConfig->SetBool(SettingsSection, TEXT("PadVibration"), PadVibration, GGameUserSettingsIni);
     GConfig->SetFloat(SettingsSection, TEXT("Volume"), Match()->MasterVolume, GGameUserSettingsIni);
     GConfig->Flush(false, GGameUserSettingsIni);
 }
@@ -123,6 +171,19 @@ void AArenaController::SetupInputComponent()
     InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AArenaController::SelectFan);
     InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &AArenaController::SelectLance);
     InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &AArenaController::SelectComet);
+    InputComponent->BindAxis(TEXT("PadForward"), this, &AArenaController::PadForward);
+    InputComponent->BindAxis(TEXT("PadStrafe"), this, &AArenaController::PadStrafe);
+    InputComponent->BindAxis(TEXT("PadYaw"), this, &AArenaController::PadYaw);
+    InputComponent->BindAxis(TEXT("PadPitch"), this, &AArenaController::PadPitch);
+    InputComponent->BindKey(EKeys::Gamepad_RightTrigger, IE_Pressed, this, &AArenaController::PadCastPressed);
+    InputComponent->BindKey(EKeys::Gamepad_RightTrigger, IE_Released, this, &AArenaController::PadCastReleased);
+    InputComponent->BindKey(EKeys::Gamepad_LeftTrigger, IE_Pressed, this, &AArenaController::PadWard);
+    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Bottom, IE_Pressed, this, &AArenaController::PadJump);
+    InputComponent->BindKey(EKeys::Gamepad_FaceButton_Bottom, IE_Released, this, &AArenaController::JumpReleased);
+    InputComponent->BindKey(EKeys::Gamepad_LeftThumbstick, IE_Pressed, this, &AArenaController::PadSprint);
+    InputComponent->BindKey(EKeys::Gamepad_LeftShoulder, IE_Pressed, this, &AArenaController::PadPreviousSpell);
+    InputComponent->BindKey(EKeys::Gamepad_RightShoulder, IE_Pressed, this, &AArenaController::PadNextSpell);
+    InputComponent->BindKey(EKeys::Gamepad_Special_Right, IE_Pressed, this, &AArenaController::PadPause).bExecuteWhenPaused = true;
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AArenaController::TogglePause).bExecuteWhenPaused = true;
 }
 
@@ -131,6 +192,7 @@ void AArenaController::Hide()
     if (Panel && GEngine && GEngine->GameViewport)
         GEngine->GameViewport->RemoveViewportWidgetContent(Panel.ToSharedRef());
     Panel.Reset();
+    MenuFocus.Reset();
 }
 
 void AArenaController::ShowMenu()
@@ -145,21 +207,42 @@ void AArenaController::ShowResults()
 
 void AArenaController::Show(Screen Page)
 {
+    int FocusIndex = Page == Screen::Main ? 4 : 0;
+    if (Page == Current)
+        for (int Index = 0; Index < MenuFocus.Num(); ++Index)
+            if (MenuFocus[Index]->HasKeyboardFocus())
+                FocusIndex = Index;
     Hide();
     Current = Page;
     Casting = false;
+    PadCasting = false;
+    KeyboardSprinting = false;
+    PadSprinting = false;
+    ApplySprint();
     CastQueued = false;
     if (!GEngine || !GEngine->GameViewport)
         return;
     AArenaMatch* Arena = Match();
     const TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
-    const auto MenuButton = [Arena](FString Name, TFunction<void()> Action, FLinearColor Color = Paper)
+    const auto MenuButton = [this, Arena](FString Name, TFunction<void()> Action, FLinearColor Color = Paper)
     {
-        return Button(MoveTemp(Name), [Arena, Action = MoveTemp(Action)]
+        const auto Widget = Button(MoveTemp(Name), [Arena, Action = MoveTemp(Action)]
         {
             Arena->Feedback(FVector::ZeroVector, 9, .28f);
             Action();
         }, Color);
+        MenuFocus.Add(Widget);
+        return Widget;
+    };
+    const auto Slider = [this, &Box](const TCHAR* Name, float& Value, float Min, float Max, float Step)
+    {
+        const TSharedRef<SSlider> Widget = SNew(SSlider).MinValue(Min).MaxValue(Max).StepSize(Step)
+            .RequiresControllerLock(false)
+            .Value_Lambda([&Value] { return Value; })
+            .OnValueChanged_Lambda([&Value](float NewValue) { Value = NewValue; })
+            .OnMouseCaptureEnd_Lambda([this] { SaveSettings(); });
+        MenuFocus.Add(Widget);
+        Choice(Box, Name, Widget);
     };
     const FString Team = Arena->ChosenTeam == PvG::Team::Purple ? TEXT("Purple") : TEXT("Green");
 
@@ -189,7 +272,10 @@ void AArenaController::Show(Screen Page)
             Show(Screen::Main);
         }));
         Line(Box, TEXT("WASD Move   Shift Sprint   Space Jump"), 11, Muted, 3.f);
-        Line(Box, TEXT("Left Click Cast   1–4 Select Spell   Q Ward"), 11, Muted, 17.f);
+        Line(Box, TEXT("Left Click Cast   1–4 Select Spell   Q Ward"), 11, Muted, 8.f);
+        Line(Box, TEXT("Sticks Move / Aim   L3 Sprint   Cross / A Jump"), 11, Muted, 3.f);
+        Line(Box, TEXT("R2 / RT Cast   L2 / LT Ward   Bumpers Select Spell"), 11, Muted, 3.f);
+        Line(Box, TEXT("D-pad Navigate   Cross / A Confirm   Options / Menu Pause"), 11, Muted, 17.f);
         Row(Box, MenuButton(TEXT("Enter the Meridian"), [Arena] { Arena->StartMatch(); }, Accent));
         Row(Box, MenuButton(TEXT("Settings"), [this] { OpenSettings(Screen::Main); }));
         Row(Box, MenuButton(TEXT("Exit"), [this] { Quit(); }), 0.f);
@@ -237,12 +323,22 @@ void AArenaController::Show(Screen Page)
             Settings->SaveSettings();
             Show(Screen::Settings);
         }));
-        Choice(Box, TEXT("MOUSE SENSITIVITY"), SNew(SSlider).MinValue(.3f).MaxValue(2.4f).Value(Sensitivity)
-            .OnValueChanged_Lambda([this](float Value) { Sensitivity = Value; })
-            .OnMouseCaptureEnd_Lambda([this] { SaveSettings(); }));
-        Choice(Box, TEXT("MASTER VOLUME"), SNew(SSlider).Value(Arena->MasterVolume)
-            .OnValueChanged_Lambda([Arena](float Value) { Arena->MasterVolume = Value; })
-            .OnMouseCaptureEnd_Lambda([this] { SaveSettings(); }));
+        Slider(TEXT("MOUSE SENSITIVITY"), Sensitivity, .3f, 2.4f, .1f);
+        Slider(TEXT("STICK SENSITIVITY"), PadSensitivity, .35f, 2.5f, .1f);
+        Choice(Box, TEXT("INVERT STICK Y"), MenuButton(InvertPadPitch ? TEXT("On") : TEXT("Off"), [this]
+        {
+            InvertPadPitch = !InvertPadPitch;
+            SaveSettings();
+            Show(Screen::Settings);
+        }));
+        Choice(Box, TEXT("VIBRATION"), MenuButton(PadVibration ? TEXT("On") : TEXT("Off"), [this]
+        {
+            PadVibration = !PadVibration;
+            SaveSettings();
+            Show(Screen::Settings);
+        }));
+        Slider(TEXT("MASTER VOLUME"), Arena->MasterVolume, 0.f, 1.f, .05f);
+        Line(Box, TEXT("D-pad Left / Right adjusts sliders"), 11, Muted, 9.f);
         Row(Box, MenuButton(TEXT("Back"), [this] { SaveSettings(); Show(SettingsFrom); }), 0.f);
     }
     else
@@ -259,16 +355,20 @@ void AArenaController::Show(Screen Page)
     }
 
     const FSlateBrush* Brush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
-    Panel = SNew(SOverlay)
+    Panel = SNew(SArenaMenu).OnBack(FSimpleDelegate::CreateUObject(this, &AArenaController::TogglePause))
+    [
+        SNew(SOverlay)
         + SOverlay::Slot()
         [SNew(SBorder).BorderImage(Brush).BorderBackgroundColor(FLinearColor(.01f, .02f, .04f, .39f))]
         + SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
         [
             SNew(SBorder).BorderImage(Brush).BorderBackgroundColor(PanelTint).Padding(FMargin(30.f, 24.f))
             [SNew(SBox).WidthOverride(406.f)[Box]]
-        ];
+        ]
+    ];
     GEngine->GameViewport->AddViewportWidgetContent(Panel.ToSharedRef(), 20);
     FInputModeGameAndUI InputMode;
+    InputMode.SetWidgetToFocus(MenuFocus[FMath::Clamp(FocusIndex, 0, MenuFocus.Num() - 1)]);
     InputMode.SetHideCursorDuringCapture(false);
     InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
     SetInputMode(InputMode);
@@ -295,6 +395,7 @@ void AArenaController::Resume()
     ResetIgnoreLookInput();
     ResetIgnoreMoveInput();
     Casting = false;
+    PadCasting = false;
     CastQueued = false;
 }
 
@@ -321,6 +422,8 @@ void AArenaController::TogglePause()
     {
         if (Current == Screen::Pause)
             Resume();
+        else if (Current == Screen::Results)
+            MainMenu();
         else if (Current == Screen::Settings)
         {
             SaveSettings();
@@ -347,26 +450,152 @@ void AArenaController::MoveRight(float Amount)
         GetPawn()->AddMovementInput(FRotator(0, GetControlRotation().Yaw + 90., 0).Vector(), Amount);
 }
 
-void AArenaController::LookYaw(float Amount) { AddYawInput(Amount * Sensitivity); }
-void AArenaController::LookPitch(float Amount) { AddPitchInput(Amount * Sensitivity); }
+void AArenaController::LookYaw(float Amount)
+{
+    if (!Panel.IsValid() && !FMath::IsNearlyZero(Amount))
+    {
+        UsingGamepad = false;
+        AddYawInput(Amount * Sensitivity);
+    }
+}
+
+void AArenaController::LookPitch(float Amount)
+{
+    if (!Panel.IsValid() && !FMath::IsNearlyZero(Amount))
+    {
+        UsingGamepad = false;
+        AddPitchInput(Amount * Sensitivity);
+    }
+}
+
+void AArenaController::PadForward(float Amount)
+{
+    if (!Panel.IsValid() && Amount != 0.f)
+    {
+        UsingGamepad = true;
+        MoveForward(Amount);
+    }
+}
+
+void AArenaController::PadStrafe(float Amount)
+{
+    if (!Panel.IsValid() && Amount != 0.f)
+    {
+        UsingGamepad = true;
+        MoveRight(Amount);
+    }
+}
+
+void AArenaController::PadYaw(float Amount)
+{
+    if (!IsLookInputIgnored() && Amount != 0.f)
+    {
+        UsingGamepad = true;
+        RotationInput.Yaw += StickRate(Amount, 270.f) * PadSensitivity *
+            FMath::Min(GetWorld()->GetDeltaSeconds(), .05f);
+    }
+}
+
+void AArenaController::PadPitch(float Amount)
+{
+    if (!IsLookInputIgnored() && Amount != 0.f)
+    {
+        UsingGamepad = true;
+        RotationInput.Pitch += StickRate(Amount, 180.f) * PadSensitivity *
+            FMath::Min(GetWorld()->GetDeltaSeconds(), .05f) * (InvertPadPitch ? -1.f : 1.f);
+    }
+}
+
+void AArenaController::PadCastPressed()
+{
+    if (!Panel.IsValid())
+    {
+        UsingGamepad = true;
+        PadCasting = true;
+        CastQueued = true;
+    }
+}
+
+void AArenaController::PadCastReleased() { PadCasting = false; }
+
+void AArenaController::PadSprint()
+{
+    if (!Panel.IsValid())
+    {
+        UsingGamepad = true;
+        PadSprinting = !PadSprinting;
+        ApplySprint();
+    }
+}
+
+void AArenaController::PadJump() { UsingGamepad = true; JumpPressed(); }
+void AArenaController::PadWard() { UsingGamepad = true; CastWard(); }
+void AArenaController::PadPause() { UsingGamepad = true; TogglePause(); }
+void AArenaController::PadPreviousSpell() { CycleSpell(-1); }
+void AArenaController::PadNextSpell() { CycleSpell(1); }
+
+void AArenaController::CycleSpell(int Step)
+{
+    if (!Panel.IsValid())
+    {
+        UsingGamepad = true;
+        constexpr int Count = PvG::Index(PvG::Spell::Count);
+        Selected = static_cast<PvG::Spell>((PvG::Index(Selected) + Count + Step) % Count);
+    }
+}
+
+void AArenaController::PulseGamepad(float Strength, float Seconds)
+{
+    if (UsingGamepad && PadVibration && IsLocalController())
+        PlayDynamicForceFeedback(Strength, Seconds, true, false, true, true);
+}
+
+void AArenaController::DeviceConnectionChanged(EInputDeviceConnectionState State, FPlatformUserId User, FInputDeviceId)
+{
+    if (State != EInputDeviceConnectionState::Disconnected ||
+        !GetLocalPlayer() || User != GetLocalPlayer()->GetPlatformUserId())
+        return;
+
+    if (PlayerInput)
+        PlayerInput->FlushPressedKeys();
+    PadCasting = false;
+    PadSprinting = false;
+    CastQueued = false;
+    UsingGamepad = false;
+    ApplySprint();
+    JumpReleased();
+}
 void AArenaController::PressCast()
 {
-    Casting = !Panel.IsValid();
-    CastQueued = Casting;
+    if (!Panel.IsValid())
+    {
+        UsingGamepad = false;
+        Casting = true;
+        CastQueued = true;
+    }
 }
 void AArenaController::ReleaseCast() { Casting = false; }
 
 void AArenaController::Sprint()
 {
     if (!Panel.IsValid())
-        if (AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()))
-            Soldier->SetSprinting(true);
+    {
+        UsingGamepad = false;
+        KeyboardSprinting = true;
+        ApplySprint();
+    }
 }
 
 void AArenaController::Walk()
 {
+    KeyboardSprinting = false;
+    ApplySprint();
+}
+
+void AArenaController::ApplySprint()
+{
     if (AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()))
-        Soldier->SetSprinting(false);
+        Soldier->SetSprinting(KeyboardSprinting || PadSprinting);
 }
 
 void AArenaController::JumpPressed()
@@ -386,13 +615,20 @@ void AArenaController::CastWard()
 {
     if (!Panel.IsValid())
         if (AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()))
+        {
+            const double Before = Soldier->Rules.WardUntil;
             Soldier->Ward();
+            if (Soldier->Rules.WardUntil > Before)
+                PulseGamepad(.23f, .18f);
+        }
 }
 
 void AArenaController::PlayerTick(float DeltaSeconds)
 {
     Super::PlayerTick(DeltaSeconds);
-    if (Casting || CastQueued)
+    if (const AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()); Soldier && !Soldier->Rules.Alive())
+        PadSprinting = false;
+    if (Casting || PadCasting || CastQueued)
         if (AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()))
             Soldier->Cast(Selected);
     CastQueued = false;
