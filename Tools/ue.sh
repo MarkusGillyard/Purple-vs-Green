@@ -68,17 +68,18 @@ case "$action" in
     ;;
   smoke)
     package=$(realpath -e -- "${1:?Supply the Linux package directory}")
-    if ! grep -Eq '^[a-f0-9]{40} Development$' "$package/REVISION.txt"; then
-      echo 'Smoke requires a manifest-bearing Development package with runtime logging.' >&2
+    if ! grep -Eq '^[a-f0-9]{40} (Development|Shipping)$' "$package/REVISION.txt"; then
+      echo 'Smoke requires a manifest-bearing Development or Shipping package.' >&2
       exit 2
     fi
     profile=$(mktemp -d "$storage/smoke.XXXXXX")
     (cd "$package" && sha256sum --strict -c ../SHA256SUMS) > "$profile/hash-readback.log"
     timeout 220 "$package/PurpleVsGreen.sh" -PvGSmoke "-userdir=$profile" \
-      -windowed -ResX=1920 -ResY=1080 -NoVSync -unattended -NoCrashDialog -stdout -FullStdOutLogOutput \
+      -windowed -ResX=1920 -ResY=1080 -NoVSync -unattended -NoCrashDialog -notraceserver -nosplash -stdout -FullStdOutLogOutput \
       2>&1 | tee "$profile/smoke.log"
-    rg -q 'PvG smoke passed' "$profile/smoke.log"
-    printf 'Smoke evidence at %s\n' "$profile/smoke.log"
+    grep -qx 'PvG smoke passed' "$profile/Saved/PvGSmoke.txt"
+    cat "$profile/Saved/PvGSmoke.txt"
+    printf 'Smoke evidence at %s\n' "$profile"
     ;;
   *)
     echo "Unknown command: $action" >&2

@@ -11,6 +11,8 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Misc/Parse.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
@@ -64,6 +66,11 @@ void Choice(const TSharedRef<SVerticalBox>& Box, FString Label, TSharedRef<SWidg
         + SHorizontalBox::Slot().FillWidth(.41f).VAlign(VAlign_Center)[Text(Label, 12, Muted)]
         + SHorizontalBox::Slot().FillWidth(.59f)[Value]);
 }
+}
+
+AArenaController::AArenaController()
+{
+    bAutoManageActiveCameraTarget = false;
 }
 
 AArenaMatch* AArenaController::Match() const
@@ -435,14 +442,25 @@ void AArenaController::RunSmoke()
             Sum += Ms;
             SlowFrames += Ms > 33.33f;
         }
-        UE_LOG(LogTemp, Display,
-            TEXT("PvG smoke round %d team %d samples %d mean FPS %.2f p95 %.3f ms p99 %.3f ms max %.3f ms over33 %d"),
-            SmokeRound + 1, PvG::Index(Arena->ChosenTeam), FrameTimes.Num(), 1000. * FrameTimes.Num() / Sum,
-            FrameTimes[FrameTimes.Num() * 95 / 100], FrameTimes[FrameTimes.Num() * 99 / 100], FrameTimes.Last(), SlowFrames);
+        const FString Summary = FString::Printf(
+            TEXT("PvG smoke round %d team %d score Purple %d Green %d hits %d wards %d comets %d comet impacts %d samples %d mean FPS %.2f p95 %.3f ms p99 %.3f ms max %.3f ms over33 %d"),
+            SmokeRound + 1, PvG::Index(Arena->ChosenTeam), Arena->Rules.Score[0], Arena->Rules.Score[1],
+            Arena->PlayerHits, Arena->PlayerWards, Arena->PlayerComets, Arena->PlayerCometImpacts,
+            FrameTimes.Num(), 1000. * FrameTimes.Num() / Sum, FrameTimes[FrameTimes.Num() * 95 / 100],
+            FrameTimes[FrameTimes.Num() * 99 / 100], FrameTimes.Last(), SlowFrames);
+        SmokeEvidence += Summary + TEXT("\n");
+        UE_LOG(LogTemp, Display, TEXT("%s"), *Summary);
         if (++SmokeRound < 2)
             MainMenu();
         else
         {
+            SmokeEvidence += TEXT("PvG smoke passed\n");
+            if (!FFileHelper::SaveStringToFile(SmokeEvidence, *(FPaths::ProjectSavedDir() / TEXT("PvGSmoke.txt"))))
+            {
+                UE_LOG(LogTemp, Error, TEXT("PvG smoke could not write its result"));
+                FPlatformMisc::RequestExitWithStatus(false, 5);
+                return;
+            }
             UE_LOG(LogTemp, Display, TEXT("PvG smoke passed"));
             Quit();
         }

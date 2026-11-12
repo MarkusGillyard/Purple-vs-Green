@@ -14,6 +14,7 @@ class AArenaController final : public APlayerController
     GENERATED_BODY()
 
 public:
+    AArenaController();
     void BeginPlay() override;
     void EndPlay(const EEndPlayReason::Type Reason) override;
     void SetupInputComponent() override;
@@ -65,5 +66,6 @@ private:
     double LastFrameAt = 0.;
     bool SmokeWardUsed = false;
     TArray<float> FrameTimes;
+    FString SmokeEvidence;
     float Sensitivity = 1.f;
 };

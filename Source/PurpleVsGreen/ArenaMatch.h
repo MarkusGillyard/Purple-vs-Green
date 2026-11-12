@@ -80,6 +80,7 @@ private:
     void BuildRoutes();
     void BuildSounds();
     void ClearRound();
+    void ViewOverview() const;
     void UpdateBot(int Index, float DeltaSeconds, double Now);
     void Think(AArenaSoldier* Soldier, FArenaBot& Brain, double Now);
     void Finish();

@@ -55,7 +55,7 @@ void AArenaMatch::StartPlay()
     LocalController = Cast<AArenaController>(GetWorld()->GetFirstPlayerController());
     if (LocalController)
     {
-        LocalController->SetViewTarget(Overview);
+        ViewOverview();
         LocalController->ShowMenu();
     }
 }
@@ -325,15 +325,22 @@ void AArenaMatch::StartMatch()
         Brain.Patrol = Index;
     }
     LocalController->Possess(PlayerSoldier());
+    LocalController->SetViewTarget(PlayerSoldier());
     LocalController->BeginRound();
     Feedback(PlayerSoldier()->Eye(), 7, .72f);
+}
+
+void AArenaMatch::ViewOverview() const
+{
+    LocalController->SetControlRotation(Overview->GetActorRotation());
+    LocalController->SetViewTarget(Overview);
 }
 
 void AArenaMatch::ReturnToMenu()
 {
     Rules.State = PvG::Phase::Menu;
     ClearRound();
-    LocalController->SetViewTarget(Overview);
+    ViewOverview();
     LocalController->ShowMenu();
 }
 
@@ -344,7 +351,7 @@ void AArenaMatch::Finish()
         Soldier->SetSprinting(false);
         Soldier->ConsumeMovementInputVector();
     }
-    LocalController->SetViewTarget(Overview);
+    ViewOverview();
     LocalController->ShowResults();
     const int Own = Rules.Score[PvG::Index(ChosenTeam)];
     const int Opposing = Rules.Score[PvG::Index(PvG::EnemyOf(ChosenTeam))];
