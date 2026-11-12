@@ -54,7 +54,7 @@ public:
     void MarkHit(const AArenaSoldier* Caster, const AArenaSoldier* Victim);
     void ShowWard(const AArenaSoldier* Soldier);
     void Feedback(FVector Location, int Event, float Volume = 1.f);
-    UMaterialInstanceDynamic* Paint(UObject* Outer, FLinearColor Color) const;
+    UMaterialInstanceDynamic* Paint(UObject* Outer, FLinearColor Color, bool Luminous = false) const;
     bool IsPlaying() const { return Rules.State == PvG::Phase::Playing; }
     static FLinearColor TeamTint(PvG::Team Side);
     static FLinearColor SpellTint(PvG::Spell Spell);
@@ -98,6 +98,7 @@ private:
     UPROPERTY() TObjectPtr<UStaticMesh> Sphere;
     UPROPERTY() TObjectPtr<UStaticMesh> Cylinder;
     UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
+    UPROPERTY() TObjectPtr<UMaterialInterface> SpellMaterial;
     UPROPERTY() TArray<TObjectPtr<AArenaSoldier>> Soldiers;
     UPROPERTY() TObjectPtr<USoundAttenuation> SpatialAudio;
     TArray<TArray<uint8>> SoundSamples;

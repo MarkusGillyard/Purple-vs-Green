@@ -13,4 +13,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: Tests/run.sh
-      - run: git diff --check
+      - run: git show --check HEAD

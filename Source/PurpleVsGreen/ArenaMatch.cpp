@@ -42,6 +42,8 @@ AArenaMatch::AArenaMatch()
     Sphere = SphereAsset.Object;
     Cylinder = CylinderAsset.Object;
     BaseMaterial = ColorAsset.Object;
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Aether(TEXT("/Game/Materials/M_Aether.M_Aether"));
+    SpellMaterial = Aether.Object;
 }
 
 void AArenaMatch::StartPlay()
@@ -71,9 +73,9 @@ FLinearColor AArenaMatch::SpellTint(PvG::Spell Spell)
     return Tints[PvG::Index(Spell)];
 }
 
-UMaterialInstanceDynamic* AArenaMatch::Paint(UObject* Outer, FLinearColor Color) const
+UMaterialInstanceDynamic* AArenaMatch::Paint(UObject* Outer, FLinearColor Color, bool Luminous) const
 {
-    UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseMaterial, Outer);
+    UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(Luminous && SpellMaterial ? SpellMaterial : BaseMaterial, Outer);
     if (Material)
         Material->SetVectorParameterValue(TEXT("Color"), Color);
     return Material;
@@ -341,7 +343,9 @@ void AArenaMatch::Finish()
     }
     LocalController->SetViewTarget(Overview);
     LocalController->ShowResults();
-    Feedback(Overview->GetActorLocation(), 7, .82f);
+    const int Own = Rules.Score[PvG::Index(ChosenTeam)];
+    const int Opposing = Rules.Score[PvG::Index(PvG::EnemyOf(ChosenTeam))];
+    Feedback(FVector::ZeroVector, Own == Opposing ? 12 : Own > Opposing ? 10 : 11, .74f);
     UE_LOG(LogTemp, Display,
         TEXT("PvG round result: Purple %d Green %d Player hits %d Player damage %d Respawns %d Route recoveries %d"),
         Rules.Score[0], Rules.Score[1], PlayerHits, PlayerDamageEvents, Respawns, NavigationRecoveries);
@@ -432,7 +436,7 @@ void AArenaMatch::Defeated(AArenaSoldier* Soldier, AArenaSoldier* Killer)
 
 void AArenaMatch::Spark(FVector Location, FLinearColor Tint, float Radius, float Duration)
 {
-    Mesh(Sphere, Paint(this, Tint), FTransform(FRotator::ZeroRotator, Location, FVector(Radius / 50.f)), false, Duration);
+    Mesh(Sphere, Paint(this, Tint, true), FTransform(FRotator::ZeroRotator, Location, FVector(Radius / 50.f)), false, Duration);
 }
 
 void AArenaMatch::Beam(FVector From, FVector To, FLinearColor Tint, float Width, float Duration)
@@ -440,7 +444,7 @@ void AArenaMatch::Beam(FVector From, FVector To, FLinearColor Tint, float Width,
     const FVector Ray = To - From;
     if (Ray.SizeSquared() < 1.)
         return;
-    Mesh(Cube, Paint(this, Tint), FTransform(Ray.Rotation(), (From + To) / 2.,
+    Mesh(Cube, Paint(this, Tint, true), FTransform(Ray.Rotation(), (From + To) / 2.,
         FVector(Ray.Size() / 100., Width / 100., Width / 100.)), false, Duration);
 }
 
@@ -464,7 +468,7 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
             return;
         }
         const FVector Origin = From + Direction * 42.;
-        AActor* Orb = Mesh(Sphere, Paint(this, Tint), FTransform(Direction.Rotation(), Origin,
+        AActor* Orb = Mesh(Sphere, Paint(this, Tint, true), FTransform(Direction.Rotation(), Origin,
             FVector(.42, .29, .29)), false);
         Missiles.Add({Caster, Orb, Origin, Direction, Spec.Range});
         return;
@@ -580,9 +584,9 @@ void AArenaMatch::BuildSounds()
     SpatialAudio->Attenuation.AttenuationShapeExtents = FVector(320, 0, 0);
     SpatialAudio->Attenuation.FalloffDistance = 3950.f;
     constexpr int Rate = 22050;
-    constexpr float Start[] = {680.f, 280.f, 1110.f, 190.f, 925.f, 146.f, 330.f, 440.f, 142.f};
-    constexpr float End[] = {220.f, 104.f, 402.f, 84.f, 570.f, 48.f, 660.f, 523.f, 61.f};
-    constexpr float Length[] = {.115f, .26f, .25f, .34f, .09f, .42f, .41f, .63f, .095f};
+    constexpr float Start[] = {680.f, 280.f, 1110.f, 190.f, 925.f, 146.f, 330.f, 440.f, 142.f, 564.f, 330.f, 348.f, 294.f};
+    constexpr float End[] = {220.f, 104.f, 402.f, 84.f, 570.f, 48.f, 660.f, 523.f, 61.f, 368.f, 660.f, 164.f, 294.f};
+    constexpr float Length[] = {.115f, .26f, .25f, .34f, .09f, .42f, .41f, .63f, .095f, .060f, .77f, .64f, .52f};
     FRandomStream Noise(40691);
     for (int Event = 0; Event < UE_ARRAY_COUNT(Start); ++Event)
     {
@@ -595,7 +599,7 @@ void AArenaMatch::BuildSounds()
             const float Envelope = FMath::Min(1.f, Time / .008f) * FMath::Square(1.f - Progress);
             const float Frequency = FMath::Lerp(Start[Event], End[Event], Progress);
             Phase += Frequency * 2. * UE_PI / Rate;
-            const float Harmonic = Event == 7 ? .32f : .18f;
+            const float Harmonic = Event == 7 || Event >= 10 ? .32f : .18f;
             const float Texture = Event == 1 || Event == 5 || Event == 8 ? .35f : .065f;
             const float Signal = .54f * FMath::Sin(Phase) + Harmonic * FMath::Sin(Phase * 1.5)
                 + Texture * Noise.FRandRange(-1.f, 1.f);
@@ -610,19 +614,30 @@ void AArenaMatch::Feedback(FVector Location, int Event, float Volume)
 {
     if (!SoundSamples.IsValidIndex(Event) || !LocalController)
         return;
-    FVector Listener;
-    FRotator Facing;
-    LocalController->GetPlayerViewPoint(Listener, Facing);
-    const float Distance = FVector::Dist(Listener, Location);
-    const float Attenuation = FMath::Clamp(1.f - Distance / 4500.f, 0.f, 1.f);
-    if (Attenuation <= .025f || MasterVolume <= 0.f)
+    const bool Interface = Event >= 9;
+    if (MasterVolume <= 0.f)
         return;
+    if (!Interface)
+    {
+        FVector Listener;
+        FRotator Facing;
+        LocalController->GetPlayerViewPoint(Listener, Facing);
+        if (FVector::DistSquared(Listener, Location) > FMath::Square(4270.))
+            return;
+    }
     USoundWaveProcedural* Wave = NewObject<USoundWaveProcedural>();
     Wave->SetSampleRate(22050);
     Wave->NumChannels = 1;
     Wave->Duration = SoundSamples[Event].Num() / 44100.f;
     Wave->QueueAudio(SoundSamples[Event].GetData(), SoundSamples[Event].Num());
-    if (UAudioComponent* Audio = UGameplayStatics::SpawnSoundAtLocation(this, Wave, Location,
-        FRotator::ZeroRotator, MasterVolume * Volume, 1.f, 0.f, SpatialAudio))
+    UAudioComponent* Audio = Interface
+        ? UGameplayStatics::SpawnSound2D(this, Wave, MasterVolume * Volume)
+        : UGameplayStatics::SpawnSoundAtLocation(this, Wave, Location, FRotator::ZeroRotator,
+            MasterVolume * Volume, 1.f, 0.f, SpatialAudio);
+    if (Audio)
+    {
+        if (Interface)
+            Audio->SetUISound(true);
         Audio->StopDelayed(Wave->Duration + .03f);
+    }
 }

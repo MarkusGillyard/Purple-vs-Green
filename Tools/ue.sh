@@ -57,6 +57,9 @@ case "$action" in
       exit 1
     fi
     printf '%s %s\n' "$revision" "$configuration" > "$output/Linux/REVISION.txt"
+    mkdir -p "$output/Linux/ThirdPartyNotices"
+    cp -R "$engine/Engine/Source/ThirdParty/Licenses" "$output/Linux/ThirdPartyNotices/Unreal"
+    cp "$repo/Docs/Assets.md" "$output/Linux/ThirdPartyNotices/AssetLedger.md"
     (
       cd "$output/Linux"
       find . -type f -print0 | sort -z | xargs -0 sha256sum

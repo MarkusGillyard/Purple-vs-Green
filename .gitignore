@@ -9,3 +9,9 @@
 *.code-workspace
 *.swp
 .DS_Store
+/Build/Linux/FileOpenOrder/
+/Tools/Art/Content/
+/Tools/Art/Intermediate/
+/Tools/Art/Saved/
+/Tools/Art/Battlemage.fbx
+/Tools/Art/DerivedDataCache/

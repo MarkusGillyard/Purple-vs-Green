@@ -80,7 +80,15 @@ void AArenaHud::DrawHUD()
         const FLinearColor Tint = AArenaMatch::SpellTint(static_cast<PvG::Spell>(Spell));
         DrawRect(Spell == Selected ? FLinearColor(.05f, .09f, .14f, .97f) : Ink, Right, Y, 235.f * Unit, 28.f * Unit);
         if (Spell == Selected)
+        {
             DrawRect(Tint, Right, Y, 3.f * Unit, 28.f * Unit);
+            if (Now < Player->Rules.ReadyAt && !Player->Rules.Charging)
+            {
+                const float Delay = PvG::Arsenal[PvG::Index(Player->Rules.ActiveSpell)].Cooldown;
+                const float Ready = 1.f - static_cast<float>(Player->Rules.ReadyAt - Now) / Delay;
+                Meter(Right + 3.f * Unit, Y + 26.f * Unit, 232.f * Unit, 2.f * Unit, Ready, Tint);
+            }
+        }
         Label(FString::Printf(TEXT("%d   %s"), Spell + 1, UTF8_TO_TCHAR(Spec.Name)),
             Right + 13.f * Unit, Y + 5.f * Unit, .89f, Spell == Selected ? Paper : Muted);
         Label(FString::Printf(TEXT("%.0f"), Spec.Cost), Right + 195.f * Unit, Y + 5.f * Unit, .83f,

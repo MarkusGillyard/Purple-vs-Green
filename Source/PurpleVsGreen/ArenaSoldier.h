@@ -8,6 +8,8 @@
 class AArenaMatch;
 class UCameraComponent;
 class UStaticMeshComponent;
+class UPoseableMeshComponent;
+class UMaterialInterface;
 
 UCLASS()
 class AArenaSoldier final : public ACharacter
@@ -39,19 +41,21 @@ private:
     void Release();
     void Animate(float DeltaSeconds, double Now);
     void SetTeamAppearance();
+    void UpdateArmorPose(float Speed, float Swing, float Casting, float Ward, float Hit, float AimPitch);
     FRotator Aim = FRotator::ZeroRotator;
     double ReleaseAt = 0.;
     double LastCast = -10.;
     double LastHit = -10.;
     double LastStep = 0.;
     float Stride = 0.f;
+    float PoseCast = 0.f;
+    float PoseWard = 0.f;
+    TArray<FQuat> ComponentReferenceRotations;
 
     UPROPERTY() TObjectPtr<AArenaMatch> Arena;
     UPROPERTY() TObjectPtr<UCameraComponent> Camera;
-    UPROPERTY() TObjectPtr<USceneComponent> RightArm;
-    UPROPERTY() TObjectPtr<USceneComponent> LeftArm;
-    UPROPERTY() TObjectPtr<USceneComponent> RightLeg;
-    UPROPERTY() TObjectPtr<USceneComponent> LeftLeg;
+    UPROPERTY() TObjectPtr<UPoseableMeshComponent> Battlemage;
+    UPROPERTY() TObjectPtr<UMaterialInterface> ArmorMaterial;
     UPROPERTY() TObjectPtr<USceneComponent> CastingHands;
     UPROPERTY() TObjectPtr<USceneComponent> CastingRight;
     UPROPERTY() TObjectPtr<USceneComponent> CastingLeft;

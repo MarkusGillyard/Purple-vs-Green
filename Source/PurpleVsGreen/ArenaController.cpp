@@ -141,57 +141,66 @@ void AArenaController::Show(Screen Page)
     Hide();
     Current = Page;
     Casting = false;
+    CastQueued = false;
     if (!GEngine || !GEngine->GameViewport)
         return;
     AArenaMatch* Arena = Match();
     const TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
+    const auto MenuButton = [Arena](FString Name, TFunction<void()> Action, FLinearColor Color = Paper)
+    {
+        return Button(MoveTemp(Name), [Arena, Action = MoveTemp(Action)]
+        {
+            Arena->Feedback(FVector::ZeroVector, 9, .28f);
+            Action();
+        }, Color);
+    };
     const FString Team = Arena->ChosenTeam == PvG::Team::Purple ? TEXT("Purple") : TEXT("Green");
 
     if (Page == Screen::Main)
     {
         Line(Box, TEXT("PURPLE VS GREEN"), 32, Paper, 4.f, true);
         Line(Box, TEXT("The Meridian  /  Team Deathmatch"), 14, Accent, 22.f);
-        Choice(Box, TEXT("TEAM"), Button(Team, [this, Arena]
+        Choice(Box, TEXT("TEAM"), MenuButton(Team, [this, Arena]
         {
             Arena->ChosenTeam = PvG::EnemyOf(Arena->ChosenTeam);
             Show(Screen::Main);
         }, AArenaMatch::TeamTint(Arena->ChosenTeam)));
-        Choice(Box, TEXT("ELIMINATIONS"), Button(FString::FromInt(Arena->ScoreLimit), [this, Arena]
+        Choice(Box, TEXT("ELIMINATIONS"), MenuButton(FString::FromInt(Arena->ScoreLimit), [this, Arena]
         {
             Arena->ScoreLimit = Arena->ScoreLimit == 10 ? 20 : Arena->ScoreLimit == 20 ? 30 : 10;
             Show(Screen::Main);
         }));
-        Choice(Box, TEXT("TIME LIMIT"), Button(FString::Printf(TEXT("%d min"), Arena->Minutes), [this, Arena]
+        Choice(Box, TEXT("TIME LIMIT"), MenuButton(FString::Printf(TEXT("%d min"), Arena->Minutes), [this, Arena]
         {
             Arena->Minutes = Arena->Minutes == 3 ? 5 : Arena->Minutes == 5 ? 8 : 3;
             Show(Screen::Main);
         }));
         const TCHAR* Difficulties[] = {TEXT("Apprentice"), TEXT("Adept"), TEXT("Master")};
-        Choice(Box, TEXT("AI DIFFICULTY"), Button(Difficulties[Arena->Difficulty], [this, Arena]
+        Choice(Box, TEXT("AI DIFFICULTY"), MenuButton(Difficulties[Arena->Difficulty], [this, Arena]
         {
             Arena->Difficulty = (Arena->Difficulty + 1) % 3;
             Show(Screen::Main);
         }));
         Line(Box, TEXT("WASD Move   Shift Sprint   Space Jump"), 11, Muted, 3.f);
         Line(Box, TEXT("Left Click Cast   1–4 Select Spell   Q Ward"), 11, Muted, 17.f);
-        Row(Box, Button(TEXT("Enter the Meridian"), [Arena] { Arena->StartMatch(); }, Accent));
-        Row(Box, Button(TEXT("Settings"), [this] { OpenSettings(Screen::Main); }));
-        Row(Box, Button(TEXT("Exit"), [this] { Quit(); }), 0.f);
+        Row(Box, MenuButton(TEXT("Enter the Meridian"), [Arena] { Arena->StartMatch(); }, Accent));
+        Row(Box, MenuButton(TEXT("Settings"), [this] { OpenSettings(Screen::Main); }));
+        Row(Box, MenuButton(TEXT("Exit"), [this] { Quit(); }), 0.f);
     }
     else if (Page == Screen::Pause)
     {
         Line(Box, TEXT("MATCH PAUSED"), 27, Paper, 22.f, true);
-        Row(Box, Button(TEXT("Resume"), [this] { Resume(); }, Accent));
-        Row(Box, Button(TEXT("Settings"), [this] { OpenSettings(Screen::Pause); }));
-        Row(Box, Button(TEXT("Return to menu"), [this] { MainMenu(); }));
-        Row(Box, Button(TEXT("Exit"), [this] { Quit(); }), 0.f);
+        Row(Box, MenuButton(TEXT("Resume"), [this] { Resume(); }, Accent));
+        Row(Box, MenuButton(TEXT("Settings"), [this] { OpenSettings(Screen::Pause); }));
+        Row(Box, MenuButton(TEXT("Return to menu"), [this] { MainMenu(); }));
+        Row(Box, MenuButton(TEXT("Exit"), [this] { Quit(); }), 0.f);
     }
     else if (Page == Screen::Settings)
     {
         Line(Box, TEXT("SETTINGS"), 28, Paper, 19.f, true);
         UGameUserSettings* Settings = GEngine->GetGameUserSettings();
         const FIntPoint Resolution = Settings->GetScreenResolution();
-        Choice(Box, TEXT("RESOLUTION"), Button(FString::Printf(TEXT("%d × %d"), Resolution.X, Resolution.Y), [this, Settings, Resolution]
+        Choice(Box, TEXT("RESOLUTION"), MenuButton(FString::Printf(TEXT("%d × %d"), Resolution.X, Resolution.Y), [this, Settings, Resolution]
         {
             Settings->SetScreenResolution(Resolution.X >= 1920 ? FIntPoint(1280, 720) :
                 Resolution.X >= 1600 ? FIntPoint(1920, 1080) : FIntPoint(1600, 900));
@@ -201,7 +210,7 @@ void AArenaController::Show(Screen Page)
             Show(Screen::Settings);
         }));
         const EWindowMode::Type Mode = Settings->GetFullscreenMode();
-        Choice(Box, TEXT("DISPLAY"), Button(Mode == EWindowMode::Windowed ? TEXT("Windowed") :
+        Choice(Box, TEXT("DISPLAY"), MenuButton(Mode == EWindowMode::Windowed ? TEXT("Windowed") :
             Mode == EWindowMode::WindowedFullscreen ? TEXT("Borderless") : TEXT("Fullscreen"), [this, Settings, Mode]
         {
             Settings->SetFullscreenMode(Mode == EWindowMode::Windowed ? EWindowMode::WindowedFullscreen :
@@ -213,7 +222,7 @@ void AArenaController::Show(Screen Page)
         }));
         const int Quality = FMath::Clamp(Settings->GetViewDistanceQuality(), 0, 3);
         const TCHAR* Qualities[] = {TEXT("Low"), TEXT("Medium"), TEXT("High"), TEXT("Ultra")};
-        Choice(Box, TEXT("GRAPHICS"), Button(Qualities[Quality], [this, Settings, Quality]
+        Choice(Box, TEXT("GRAPHICS"), MenuButton(Qualities[Quality], [this, Settings, Quality]
         {
             Settings->SetOverallScalabilityLevel((Quality + 1) % 4);
             Settings->SetResolutionScaleValueEx(100.f);
@@ -227,7 +236,7 @@ void AArenaController::Show(Screen Page)
         Choice(Box, TEXT("MASTER VOLUME"), SNew(SSlider).Value(Arena->MasterVolume)
             .OnValueChanged_Lambda([Arena](float Value) { Arena->MasterVolume = Value; })
             .OnMouseCaptureEnd_Lambda([this] { SaveSettings(); }));
-        Row(Box, Button(TEXT("Back"), [this] { SaveSettings(); Show(SettingsFrom); }), 0.f);
+        Row(Box, MenuButton(TEXT("Back"), [this] { SaveSettings(); Show(SettingsFrom); }), 0.f);
     }
     else
     {
@@ -237,9 +246,9 @@ void AArenaController::Show(Screen Page)
         Line(Box, FString::Printf(TEXT("Purple  %d      Green  %d"), Arena->Rules.Score[0], Arena->Rules.Score[1]), 20, Accent);
         const AArenaSoldier* Player = Arena->PlayerSoldier();
         Line(Box, FString::Printf(TEXT("%d eliminations   /   %d defeats"), Player->Eliminations, Player->Defeats), 13, Muted, 19.f);
-        Row(Box, Button(TEXT("Rematch"), [Arena] { Arena->StartMatch(); }, Accent));
-        Row(Box, Button(TEXT("Return to menu"), [this] { MainMenu(); }));
-        Row(Box, Button(TEXT("Exit"), [this] { Quit(); }), 0.f);
+        Row(Box, MenuButton(TEXT("Rematch"), [Arena] { Arena->StartMatch(); }, Accent));
+        Row(Box, MenuButton(TEXT("Return to menu"), [this] { MainMenu(); }));
+        Row(Box, MenuButton(TEXT("Exit"), [this] { Quit(); }), 0.f);
     }
 
     const FSlateBrush* Brush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
@@ -279,6 +288,7 @@ void AArenaController::Resume()
     ResetIgnoreLookInput();
     ResetIgnoreMoveInput();
     Casting = false;
+    CastQueued = false;
 }
 
 void AArenaController::MainMenu()
@@ -335,9 +345,7 @@ void AArenaController::LookPitch(float Amount) { AddPitchInput(Amount * Sensitiv
 void AArenaController::PressCast()
 {
     Casting = !Panel.IsValid();
-    if (Casting)
-        if (AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()))
-            Soldier->Cast(Selected);
+    CastQueued = Casting;
 }
 void AArenaController::ReleaseCast() { Casting = false; }
 
@@ -377,9 +385,10 @@ void AArenaController::CastWard()
 void AArenaController::PlayerTick(float DeltaSeconds)
 {
     Super::PlayerTick(DeltaSeconds);
-    if (Casting)
+    if (Casting || CastQueued)
         if (AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()))
             Soldier->Cast(Selected);
+    CastQueued = false;
     if (Smoke && Match())
         RunSmoke();
 }

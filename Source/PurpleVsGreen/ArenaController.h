@@ -57,6 +57,7 @@ private:
     Screen SettingsFrom = Screen::Main;
     PvG::Spell Selected = PvG::Spell::Thread;
     bool Casting = false;
+    bool CastQueued = false;
     bool Smoke = false;
     int SmokeRound = 0;
     double SmokeStarted = 0.;
