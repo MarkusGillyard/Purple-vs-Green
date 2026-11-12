@@ -255,7 +255,7 @@ void AArenaMatch::BuildArena()
     auto Sun = [this](FRotator Angle, FLinearColor Tint, float Intensity, bool Shadows)
     {
         ADirectionalLight* Lamp = GetWorld()->SpawnActor<ADirectionalLight>(FVector::ZeroVector, Angle);
-        UDirectionalLightComponent* Light = Lamp->GetComponent();
+        UDirectionalLightComponent* Light = CastChecked<UDirectionalLightComponent>(Lamp->GetLightComponent());
         Light->SetMobility(EComponentMobility::Movable);
         Light->SetLightColor(Tint);
         Light->SetIntensity(Intensity);
