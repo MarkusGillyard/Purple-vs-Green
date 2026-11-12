@@ -84,35 +84,6 @@ for j in range(7):
         faces.extend(((a, b, a + 7), (b, b + 7, a + 7)))
 export("SM_MeridianCrystal", vertices, faces)
 
-# A tapered plate above the leather sleeve, with a turned lip around its edge.
-vertices, faces = [], []
-rows = [(-50, .68), (-43, .84), (-24, .94), (11, 1.0), (37, .94), (50, .62)]
-segments = 8
-for inset in (0, -5):
-    for z, width in rows:
-        for j in range(segments + 1):
-            angle = math.radians(-51 + j * 102 / segments)
-            r = 43 + inset + (3 if j == segments // 2 else 0)
-            vertices.append((math.cos(angle) * r, math.sin(angle) * (49 + inset) * width, z))
-cols = segments + 1
-half = len(rows) * cols
-for y in range(len(rows) - 1):
-    for j in range(segments):
-        a = y * cols + j
-        quad = (a, a + 1, a + cols + 1, a + cols)
-        faces.append(quad)
-        faces.append(tuple(v + half for v in reversed(quad)))
-for j in range(segments):
-    a = j
-    b = half - cols + j
-    faces.extend(((a, a + half, a + half + 1, a + 1), (b, b + 1, b + half + 1, b + half)))
-for y in range(len(rows) - 1):
-    a = y * cols
-    b = a + segments
-    faces.extend(((a, a + cols, a + cols + half, a + half), (b, b + half, b + cols + half, b + cols)))
-uvs = [((i % cols) / segments, (point[2] + 50) / 100) for i, point in enumerate(vertices)]
-export("SM_MeridianVambrace", vertices, faces, uvs=uvs)
-
 rng = random.Random(4072)
 vertices, faces, colors = [], [], []
 for _ in range(27):

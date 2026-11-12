@@ -33,17 +33,22 @@ AArenaSoldier::AArenaSoldier()
     Camera->bUsePawnControlRotation = true;
     Camera->SetFieldOfView(96.f);
 
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> Box(TEXT("/Engine/BasicShapes/Cube.Cube"));
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> Vambrace(TEXT("/Game/Meridian/SM_MeridianVambrace.SM_MeridianVambrace"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> LeftArm(
+        TEXT("/Game/Battlemage/SM_CastingArm_L.SM_CastingArm_L"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> RightArm(
+        TEXT("/Game/Battlemage/SM_CastingArm_R.SM_CastingArm_R"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Finger(
+        TEXT("/Game/Battlemage/SM_CastingFinger.SM_CastingFinger"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Fingertip(
+        TEXT("/Game/Battlemage/SM_CastingFingertip.SM_CastingFingertip"));
     static ConstructorHelpers::FObjectFinder<USkeletalMesh> Body(
         TEXT("/Game/Battlemage/SK_Battlemage.SK_Battlemage"));
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> Surface(
         TEXT("/Game/Materials/M_Armor.M_Armor"));
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> GearSurface(
+        TEXT("/Game/Materials/M_CastingGear.M_CastingGear"));
     ArmorMaterial = Surface.Object;
-    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Engraving(TEXT("/Game/Materials/M_MeridianVambrace.M_MeridianVambrace"));
-    BracerMaterial = Engraving.Object;
+    CastingMaterial = GearSurface.Object;
     Battlemage = CreateDefaultSubobject<UPoseableMeshComponent>(TEXT("Battlemage"));
     Battlemage->SetupAttachment(RootComponent);
     Battlemage->SetSkinnedAssetAndUpdate(Body.Object);
@@ -54,73 +59,48 @@ AArenaSoldier::AArenaSoldier()
 
     CastingHands = CreateDefaultSubobject<USceneComponent>(TEXT("FirstPersonRig"));
     CastingHands->SetupAttachment(Camera);
-    auto GauntletPart = [&](FName Name, USceneComponent* Parent, UStaticMesh* Mesh, FVector Location,
-                            FVector Scale, FRotator Angle, bool Dyed, bool Metal = false)
+    auto GearPart = [&](FName Name, USceneComponent* Parent, UStaticMesh* Mesh)
     {
-        UStaticMeshComponent* Shape = AddPart(Name, Parent, Mesh, Location, Scale);
-        Shape->SetRelativeRotation(Angle);
-        Shape->SetOnlyOwnerSee(true);
-        Shape->SetCastShadow(false);
-        (Metal ? Trim : Dyed ? Livery : Armor).Add(Shape);
-        return Shape;
+        UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+        Part->SetupAttachment(Parent);
+        Part->SetStaticMesh(Mesh);
+        Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        Part->SetOnlyOwnerSee(true);
+        Part->SetCastShadow(false);
+        CastingGear.Add(Part);
     };
+
     for (const int Side : {-1, 1})
     {
         const bool Right = Side > 0;
         const FString Prefix = Right ? TEXT("CastRight") : TEXT("CastLeft");
         USceneComponent* Wrist = CreateDefaultSubobject<USceneComponent>(*Prefix);
         Wrist->SetupAttachment(CastingHands);
-        Wrist->SetRelativeLocation(FVector(Right ? 61 : 55, Side * 23, Right ? -23 : -25));
+        Wrist->SetRelativeLocation(FVector(Right ? 56 : 52, Side * 23, Right ? -23 : -26));
         Wrist->SetRelativeRotation(FRotator(8, Side * -18, Side * 12));
         (Right ? CastingRight : CastingLeft) = Wrist;
+        GearPart(FName(Prefix + TEXT("Arm")), Wrist, Right ? RightArm.Object : LeftArm.Object);
 
-        auto Segment = [&](const TCHAR* Label, UStaticMesh* Mesh, FVector Location, FVector Scale,
-                           FRotator Angle, bool Dyed, bool Metal = false)
+        const FVector Knuckles[] = {{7.25, -3.55, -.25}, {8.05, -1.18, -.09},
+                                    {7.85, 1.13, -.22}, {6.75, 3.27, -.48}};
+        const float Length[] = {.94f, 1.10f, 1.02f, .76f};
+        for (int Digit = 0; Digit < UE_ARRAY_COUNT(Knuckles); ++Digit)
         {
-            return GauntletPart(FName(Prefix + Label), Wrist, Mesh, Location, Scale, Angle, Dyed, Metal);
-        };
-        Segment(TEXT("Sleeve"), Cylinder.Object, {-18, 0, -2}, {.142, .147, .47}, {90, 0, 0}, false);
-        Bracers.Add(Segment(TEXT("Bracer"), Vambrace.Object, {-17, 0, -1.5}, {.34, .30, .36}, {90, 0, 0}, false));
-        for (const int Edge : {-1, 1})
-        {
-            const FString Rivet = FString::Printf(TEXT("BraceRivet%d"), Edge + 1);
-            Segment(*Rivet, Sphere.Object, {-6, Edge * 5.8, 11.7}, {.023, .023, .019},
-                FRotator::ZeroRotator, false, true);
-        }
-        Segment(TEXT("Cuff"), Cylinder.Object, {-5, 0, -1.3}, {.146, .152, .065}, {90, 0, 0}, false, true);
-        Segment(TEXT("CuffBinding"), Cylinder.Object, {-7.8, 0, -1.3}, {.147, .153, .015}, {90, 0, 0}, true);
-        Segment(TEXT("Palm"), Sphere.Object, {4.7, 0, 0}, {.151, .147, .077}, {0, 0, 0}, false);
-        Segment(TEXT("Plate"), Sphere.Object, {4.4, 0, 3.1}, {.127, .119, .034}, {0, 0, 0}, true);
-        Segment(TEXT("Seal"), Box.Object, {5, 0, 5.0}, {.034, .034, .014}, {0, 45, 0}, false, true);
-        Segment(TEXT("Thumb"), Sphere.Object, {6.7, Side * -6.8, -1.5}, {.084, .038, .043}, {5, Side * -28.f, 0}, false);
-        for (int Digit = 0; Digit < 4; ++Digit)
-        {
-            const double Length[] = {6.8, 8.4, 7.7, 5.6};
             const FString Name = Prefix + FString::Printf(TEXT("Finger%d"), Digit);
-            USceneComponent* Joint = CreateDefaultSubobject<USceneComponent>(*Name);
-            Joint->SetupAttachment(Wrist);
-            Joint->SetRelativeLocation({10.1, Side * (-4.7 + Digit * 3.03), -.4});
-            Digits.Add(Joint);
-            GauntletPart(FName(Name + TEXT("Leather")), Joint, Sphere.Object, {Length[Digit] * .4, 0, 0},
-                {Length[Digit] / 100., .028, .030}, FRotator::ZeroRotator, false);
-            GauntletPart(FName(Name + TEXT("Tip")), Joint, Sphere.Object, {Length[Digit] * .79, 0, -.7},
-                {Length[Digit] * .57 / 100., .024, .027}, FRotator(-14, 0, 0), false);
-            GauntletPart(FName(Name + TEXT("Knuckle")), Joint, Sphere.Object, {1.7, 0, 1.3},
-                {.039, .028, .021}, FRotator::ZeroRotator, false, true);
+            USceneComponent* Knuckle = CreateDefaultSubobject<USceneComponent>(*Name);
+            Knuckle->SetupAttachment(Wrist);
+            Knuckle->SetRelativeLocation(Knuckles[Digit] * FVector(1., Side, 1.));
+            Knuckle->SetRelativeScale3D({Length[Digit], Digit == 3 ? .82 : 1., Digit == 3 ? .83 : 1.});
+            GearPart(FName(Name + TEXT("Base")), Knuckle, Finger.Object);
+
+            USceneComponent* Hinge = CreateDefaultSubobject<USceneComponent>(*(Name + TEXT("Hinge")));
+            Hinge->SetupAttachment(Knuckle);
+            Hinge->SetRelativeLocation({4.03, 0, -.11});
+            GearPart(FName(Name + TEXT("Tip")), Hinge, Fingertip.Object);
+            Digits.Add(Knuckle);
+            FingerHinges.Add(Hinge);
         }
     }
-}
-
-UStaticMeshComponent* AArenaSoldier::AddPart(FName Name, USceneComponent* Parent, UStaticMesh* Mesh,
-                                           FVector Location, FVector Scale)
-{
-    UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-    Part->SetupAttachment(Parent);
-    Part->SetStaticMesh(Mesh);
-    Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    Part->SetRelativeLocation(Location);
-    Part->SetRelativeScale3D(Scale);
-    return Part;
 }
 
 void AArenaSoldier::Initialize(AArenaMatch* Match, PvG::Team Side, int InSlot)
@@ -147,31 +127,39 @@ void AArenaSoldier::Initialize(AArenaMatch* Match, PvG::Team Side, int InSlot)
 void AArenaSoldier::SetTeamAppearance()
 {
     const FLinearColor Dye = AArenaMatch::TeamTint(Team);
-    const auto Finish = [this](FLinearColor Color, float Metallic, float Roughness)
+    const auto Finish = [this](UMaterialInterface* Base, FLinearColor Color, float Metallic, float Roughness)
     {
-        if (!ArmorMaterial)
+        if (!Base)
             return Arena->Paint(this, Color);
-        UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(ArmorMaterial, this);
+        UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(Base, this);
         Material->SetVectorParameterValue(TEXT("Color"), Color);
         Material->SetScalarParameterValue(TEXT("Metallic"), Metallic);
         Material->SetScalarParameterValue(TEXT("Roughness"), Roughness);
         return Material;
     };
-    UMaterialInstanceDynamic* Leather = Finish({.064f, .076f, .084f}, .02f, .79f);
-    UMaterialInstanceDynamic* Enamel = Finish(Dye * .37f, .46f, .56f);
-    UMaterialInstanceDynamic* Bronze = Finish({.58f, .34f, .13f}, .68f, .40f);
-    for (UStaticMeshComponent* Part : Armor)
-        Part->SetMaterial(0, Leather);
-    for (UStaticMeshComponent* Part : Livery)
-        Part->SetMaterial(0, Enamel);
-    for (UStaticMeshComponent* Part : Trim)
-        Part->SetMaterial(0, Bronze);
-    if (BracerMaterial)
+    struct FCastingFinish
     {
-        UMaterialInstanceDynamic* Engraved = UMaterialInstanceDynamic::Create(BracerMaterial, this);
-        Engraved->SetVectorParameterValue(TEXT("Color"), Dye);
-        for (UStaticMeshComponent* Part : Bracers)
-            Part->SetMaterial(0, Engraved);
+        FName Name;
+        FLinearColor Color;
+        float Metallic;
+        float Roughness;
+    };
+    const FCastingFinish Finishes[] = {
+        {TEXT("Leather"), {.106f, .056f, .028f}, .0f, .72f},
+        {TEXT("Cloth"), {.058f, .067f, .074f}, .0f, .91f},
+        {TEXT("Steel"), {.205f, .225f, .253f}, .62f, .56f},
+        {TEXT("Bronze"), {.43f, .25f, .105f}, .62f, .49f},
+        {TEXT("Livery"), Dye * .54f, .24f, .62f},
+        {TEXT("Thread"), {.34f, .225f, .132f}, .0f, .84f},
+    };
+    for (const FCastingFinish& Entry : Finishes)
+    {
+        UMaterialInstanceDynamic* Material = Finish(CastingMaterial, Entry.Color, Entry.Metallic, Entry.Roughness);
+        for (UStaticMeshComponent* Part : CastingGear)
+        {
+            if (const int Index = Part->GetMaterialIndex(Entry.Name); Index != INDEX_NONE)
+                Part->SetMaterial(Index, Material);
+        }
     }
 
     const auto Surface = [this](FName Name, UMaterialInterface* Material)
@@ -179,10 +167,10 @@ void AArenaSoldier::SetTeamAppearance()
         if (const int Index = Battlemage->GetMaterialIndex(Name); Index != INDEX_NONE)
             Battlemage->SetMaterial(Index, Material);
     };
-    Surface(TEXT("Obsidian"), Finish({.12f, .145f, .169f}, .51f, .46f));
-    Surface(TEXT("Bronze"), Bronze);
-    Surface(TEXT("Livery"), Finish(Dye * .78f, .045f, .73f));
-    Surface(TEXT("Gaps"), Leather);
+    Surface(TEXT("Obsidian"), Finish(ArmorMaterial, {.19f, .21f, .23f}, .65f, .47f));
+    Surface(TEXT("Bronze"), Finish(ArmorMaterial, {.43f, .25f, .105f}, .62f, .49f));
+    Surface(TEXT("Livery"), Finish(ArmorMaterial, Dye * .60f, .0f, .79f));
+    Surface(TEXT("Gaps"), Finish(ArmorMaterial, {.072f, .057f, .050f}, .0f, .81f));
 }
 
 void AArenaSoldier::Respawn(const FTransform& Spawn)

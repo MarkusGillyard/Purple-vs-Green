@@ -91,22 +91,25 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
         -ViewSway.Y * .9f - Landing * 6.f + Hit * 2.f,
         -ViewSway.X * .7f, Bob * 1.8f + Strafe * 2.6f + HitSide * Hit * 4.f));
 
-    CastingRight->SetRelativeLocation({61.f + PoseCast * 3.f, 23.f + PoseCast * Gesture.Spread,
-        -25.f + PoseCast * Gesture.Lift * .56f - AirPose * 1.4f});
-    CastingLeft->SetRelativeLocation({55.f + PoseCast * Gesture.Support * 6.f,
+    CastingRight->SetRelativeLocation({56.f + PoseCast * 3.f, 23.f + PoseCast * Gesture.Spread,
+        -23.f + PoseCast * Gesture.Lift * .56f - AirPose * 1.4f});
+    CastingLeft->SetRelativeLocation({52.f + PoseCast * Gesture.Support * 6.f,
         -24.f - PoseCast * Gesture.Spread * Gesture.Support + PoseWard * 5.2f,
-        -28.f + PoseCast * Gesture.Lift * Gesture.Support + PoseWard * 11.f});
+        -26.f + PoseCast * Gesture.Lift * Gesture.Support + PoseWard * 11.f});
     CastingRight->SetRelativeRotation(FRotator(5.f + Gather * 15.f - ReleasePulse * 9.f,
         -18.f + PoseCast * 8.f, 12.f + PoseCast * Gesture.Roll));
     CastingLeft->SetRelativeRotation(FRotator(7.f + PoseWard * 32.f + PoseCast * Gesture.Support * 15.f,
-        17.f - PoseCast * Gesture.Support * 14.f - PoseWard * 16.f, -12.f - PoseWard * 26.f));
+        17.f - PoseCast * Gesture.Support * 14.f - PoseWard * 16.f, -12.f - PoseWard * 44.f));
+    const float CastExtension = PoseCast * (1.f - .70f * Gather);
     for (int Index = 0; Index < Digits.Num(); ++Index)
     {
         const bool Right = Index >= 4;
-        const float Spread = Right ? PoseCast : FMath::Max(PoseWard, PoseCast * Gesture.Support);
+        const float Extension = Right ? CastExtension : FMath::Max(PoseWard, CastExtension * Gesture.Support);
         const int Finger = Index % 4;
-        Digits[Index]->SetRelativeRotation(FRotator(-22.f - Finger * 4.f + Spread * (28.f + Finger * 4.f),
-            (Finger - 1.5f) * (2.6f + Spread * 5.f) * (Right ? 1.f : -1.f), 0.f));
+        const float Tuck = (1.f - Extension) * (16.f + Finger * 5.f) + Gather * 11.f;
+        const float Fan = (Finger - 1.5f) * (1.8f + Extension * 5.6f) * (Right ? 1.f : -1.f);
+        Digits[Index]->SetRelativeRotation(FRotator(Extension * 7.f - Tuck, Fan, 0.f));
+        FingerHinges[Index]->SetRelativeRotation(FRotator(-7.f - Tuck * .69f, 0.f, 0.f));
     }
 
     Camera->SetFieldOfView(FMath::FInterpTo(Camera->FieldOfView,

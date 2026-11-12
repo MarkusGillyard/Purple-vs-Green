@@ -36,8 +36,6 @@ public:
     double RespawnAt = 0.;
 
 private:
-    UStaticMeshComponent* AddPart(FName Name, USceneComponent* Parent, UStaticMesh* Mesh,
-                                  FVector Location, FVector Scale);
     void Release();
     void Animate(float DeltaSeconds, double Now);
     void SetTeamAppearance();
@@ -65,13 +63,11 @@ private:
     UPROPERTY() TObjectPtr<UCameraComponent> Camera;
     UPROPERTY() TObjectPtr<UPoseableMeshComponent> Battlemage;
     UPROPERTY() TObjectPtr<UMaterialInterface> ArmorMaterial;
-    UPROPERTY() TObjectPtr<UMaterialInterface> BracerMaterial;
-    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Bracers;
+    UPROPERTY() TObjectPtr<UMaterialInterface> CastingMaterial;
+    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> CastingGear;
     UPROPERTY() TObjectPtr<USceneComponent> CastingHands;
     UPROPERTY() TObjectPtr<USceneComponent> CastingRight;
     UPROPERTY() TObjectPtr<USceneComponent> CastingLeft;
-    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Armor;
-    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Livery;
-    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Trim;
     UPROPERTY() TArray<TObjectPtr<USceneComponent>> Digits;
+    UPROPERTY() TArray<TObjectPtr<USceneComponent>> FingerHinges;
 };
