@@ -6,7 +6,7 @@ bool AArenaMatch::Walkable(FVector From, FVector To) const
 {
     FHitResult Hit;
     return !GetWorld()->SweepSingleByObjectType(Hit, From, To, FQuat::Identity,
-        FCollisionObjectQueryParams(ECC_WorldStatic), FCollisionShape::MakeSphere(46.f));
+        FCollisionObjectQueryParams(ECC_WorldStatic), FCollisionShape::MakeSphere(34.f));
 }
 
 void AArenaMatch::BuildRoutes()
@@ -36,7 +36,7 @@ void AArenaMatch::BuildRoutes()
     UE_LOG(LogTemp, Display, TEXT("PvG arena navigation: %d nodes"), Nodes.Num());
 }
 
-int AArenaMatch::NearestNode(FVector Point) const
+int AArenaMatch::NearestNode(FVector Point, bool RequireLine) const
 {
     int Result = INDEX_NONE;
     double Closest = TNumericLimits<double>::Max();
@@ -44,7 +44,7 @@ int AArenaMatch::NearestNode(FVector Point) const
     for (int Index = 0; Index < Nodes.Num(); ++Index)
     {
         const double Distance = FVector::DistSquared(Point, Nodes[Index]);
-        if (Distance < Closest && Walkable(Point, Nodes[Index]))
+        if (Distance < Closest && (!RequireLine || Walkable(Point, Nodes[Index])))
         {
             Closest = Distance;
             Result = Index;
@@ -116,6 +116,7 @@ void AArenaMatch::Think(AArenaSoldier* Soldier, FArenaBot& Brain, double Now)
     FVector Goal = Brain.Destination;
     if (Visible)
     {
+        Brain.Patrolling = false;
         if (Brain.Target.Get() != Visible || Now > Brain.SeesUntil)
             Brain.FireAt = Now + Reaction[Difficulty] + Random.FRandRange(0.f, .14f);
         Brain.Target = Visible;
@@ -129,6 +130,11 @@ void AArenaMatch::Think(AArenaSoldier* Soldier, FArenaBot& Brain, double Now)
         const bool UnderFire = Now < Soldier->Rules.WardUntil;
         if (Hurt && Range < 2000.)
             Soldier->Ward();
+
+        if (Range > 1500.)
+            Goal = Position + Forward * 550. + Flank * 200.;
+        else
+            Goal = Position + Flank * 375. + Forward * (Range < 560. ? -310. : 85.);
 
         if (Hurt && !UnderFire && Range < 2450.)
         {
@@ -148,11 +154,6 @@ void AArenaMatch::Think(AArenaSoldier* Soldier, FArenaBot& Brain, double Now)
             if (Cover != INDEX_NONE)
                 Goal = Nodes[Cover];
         }
-        else if (Range > 1500.)
-            Goal = Position + Forward * 550. + Flank * 200.;
-        else
-            Goal = Position + Flank * 375. + Forward * (Range < 560. ? -310. : 85.);
-
         if (Range < 630.)
             Brain.Spell = PvG::Spell::Fan;
         else if (Range > 2450.)
@@ -161,9 +162,13 @@ void AArenaMatch::Think(AArenaSoldier* Soldier, FArenaBot& Brain, double Now)
             Brain.Spell = Range > 950. && Random.FRand() < .21f ? PvG::Spell::Comet : PvG::Spell::Thread;
     }
     else if (Now < Brain.SeesUntil && FVector::DistSquared2D(Position, Brain.LastSeen) > FMath::Square(160.))
-        Goal = Brain.LastSeen;
-    else if (Brain.Route.IsEmpty() || FVector::DistSquared2D(Position, Goal) < FMath::Square(170.))
     {
+        Goal = Brain.LastSeen;
+        Brain.Patrolling = false;
+    }
+    else if (!Brain.Patrolling || FVector::DistSquared2D(Position, Goal) < FMath::Square(170.))
+    {
+        Brain.Patrolling = true;
         static const FVector Patrols[] = {
             {-1940, -1560, FloorCenter}, {0, -1560, FloorCenter}, {1940, -1560, FloorCenter},
             {1940, 1560, FloorCenter}, {0, 1560, FloorCenter}, {-1940, 1560, FloorCenter},
@@ -174,18 +179,27 @@ void AArenaMatch::Think(AArenaSoldier* Soldier, FArenaBot& Brain, double Now)
     Goal.Z = FloorCenter;
     const FVector CurrentGround(Position.X, Position.Y, FloorCenter);
     Brain.Destination = Goal;
-    Brain.Route = Walkable(CurrentGround, Goal) ? TArray<int>{} : FindRoute(NearestNode(CurrentGround), NearestNode(Goal));
+    Brain.Route.Reset();
+    if (!Walkable(CurrentGround, Goal))
+    {
+        const int From = NearestNode(CurrentGround, true);
+        const int To = NearestNode(Goal, false);
+        Brain.Route = FindRoute(From, To);
+        Brain.Destination = Brain.Route.IsEmpty() ? CurrentGround : Nodes[To];
+    }
     if (Now >= Brain.RetryAt)
     {
         const bool Stalled = FVector::DistSquared2D(Position, Brain.LastPosition) < FMath::Square(75.);
         if (Stalled && FVector::DistSquared2D(Position, Goal) > FMath::Square(180.))
         {
-            const int Node = NearestNode(CurrentGround);
+            const int Node = NearestNode(CurrentGround, false);
             if (Node != INDEX_NONE && !Links[Node].IsEmpty())
             {
                 const TArray<int>& Neighbors = Links[Node];
                 Brain.Destination = Nodes[Neighbors[Random.RandRange(0, Neighbors.Num() - 1)]];
                 Brain.Route.Reset();
+                Brain.Patrolling = false;
+                ++NavigationRecoveries;
                 Brain.NextThink = Now + .48;
                 if (!Soldier->GetVelocity().IsNearlyZero())
                     Soldier->Jump();

@@ -49,7 +49,7 @@ private:
     void SelectFan() { Selected = PvG::Spell::Fan; }
     void SelectLance() { Selected = PvG::Spell::Lance; }
     void SelectComet() { Selected = PvG::Spell::Comet; }
-    void RunSmoke(float DeltaSeconds);
+    void RunSmoke();
 
     AArenaMatch* Match() const;
     TSharedPtr<SWidget> Panel;
@@ -61,6 +61,8 @@ private:
     int SmokeRound = 0;
     double SmokeStarted = 0.;
     double SmokeMenuOpened = 0.;
+    double LastFrameAt = 0.;
+    bool SmokeWardUsed = false;
     TArray<float> FrameTimes;
     float Sensitivity = 1.f;
 };

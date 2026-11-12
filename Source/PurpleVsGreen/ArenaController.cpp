@@ -332,7 +332,13 @@ void AArenaController::MoveRight(float Amount)
 
 void AArenaController::LookYaw(float Amount) { AddYawInput(Amount * Sensitivity); }
 void AArenaController::LookPitch(float Amount) { AddPitchInput(Amount * Sensitivity); }
-void AArenaController::PressCast() { Casting = !Panel.IsValid(); }
+void AArenaController::PressCast()
+{
+    Casting = !Panel.IsValid();
+    if (Casting)
+        if (AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()))
+            Soldier->Cast(Selected);
+}
 void AArenaController::ReleaseCast() { Casting = false; }
 
 void AArenaController::Sprint()
@@ -375,10 +381,10 @@ void AArenaController::PlayerTick(float DeltaSeconds)
         if (AArenaSoldier* Soldier = Cast<AArenaSoldier>(GetPawn()))
             Soldier->Cast(Selected);
     if (Smoke && Match())
-        RunSmoke(DeltaSeconds);
+        RunSmoke();
 }
 
-void AArenaController::RunSmoke(float DeltaSeconds)
+void AArenaController::RunSmoke()
 {
     AArenaMatch* Arena = Match();
     const double WallTime = FPlatformTime::Seconds();
@@ -397,6 +403,8 @@ void AArenaController::RunSmoke(float DeltaSeconds)
         Arena->Minutes = 2;
         Arena->Difficulty = SmokeRound == 0 ? 1 : 2;
         FrameTimes.Reset();
+        LastFrameAt = WallTime;
+        SmokeWardUsed = false;
         Arena->StartMatch();
         return;
     }
@@ -430,7 +438,8 @@ void AArenaController::RunSmoke(float DeltaSeconds)
         return;
     }
 
-    FrameTimes.Add(DeltaSeconds * 1000.f);
+    FrameTimes.Add((WallTime - LastFrameAt) * 1000.);
+    LastFrameAt = WallTime;
     AArenaSoldier* Soldier = Arena->PlayerSoldier();
     if (!Soldier || !Soldier->Rules.Alive())
         return;
@@ -453,9 +462,15 @@ void AArenaController::RunSmoke(float DeltaSeconds)
     }
     if (Target)
     {
+        if (!SmokeWardUsed)
+        {
+            CastWard();
+            SmokeWardUsed = true;
+        }
         const FVector Aim = Target->GetActorLocation() + FVector(0, 0, 25) - Eye;
         Soldier->SetAim(Aim.Rotation());
-        Selected = Nearest < 650. ? PvG::Spell::Fan : Nearest > 2350. ? PvG::Spell::Lance : PvG::Spell::Thread;
+        Selected = Nearest < 650. ? PvG::Spell::Fan : Nearest > 2350. ? PvG::Spell::Lance :
+            SmokeRound == 1 && FrameTimes.Num() % 120 < 47 ? PvG::Spell::Comet : PvG::Spell::Thread;
         Soldier->Cast(Selected);
         MoveRight(FMath::Sin(GetWorld()->GetTimeSeconds() * 2.0) > 0. ? .75f : -.75f);
     }

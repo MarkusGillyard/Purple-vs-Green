@@ -192,7 +192,10 @@ void AArenaSoldier::Release()
 void AArenaSoldier::Ward()
 {
     if (Arena && Arena->IsPlaying() && Rules.Ward(GetWorld()->GetTimeSeconds()))
+    {
+        Arena->ShowWard(this);
         Arena->Feedback(Eye(), 6);
+    }
 }
 
 bool AArenaSoldier::ReceiveSpell(AArenaSoldier* Caster, float Damage)
@@ -203,6 +206,9 @@ bool AArenaSoldier::ReceiveSpell(AArenaSoldier* Caster, float Damage)
     if (Rules.Hit(Team, Caster->Team, Damage, Now) <= 0.f)
         return false;
     LastHit = Now;
+    Arena->MarkHit(Caster, this);
+    if (Now < Rules.WardUntil)
+        Arena->ShowWard(this);
     if (!Rules.Alive())
     {
         SetActorHiddenInGame(true);

@@ -52,7 +52,11 @@ case "$action" in
       -build -cook -stage -pak -iostore -package -archive "-archivedirectory=$output" \
       -nop4 -unattended -utf8output -nocompileuat "-ubtargs=-NoUBA -NoUbaLocal -MaxParallelActions=${PVG_BUILD_JOBS:-4}" \
       2>&1 | tee "$output/build.log"
-    printf '%s\n' "$revision" > "$output/Linux/REVISION.txt"
+    if [[ "$(git -C "$repo" rev-parse HEAD)" != "$revision" || -n "$(git -C "$repo" status --porcelain)" ]]; then
+      echo 'Source changed while packaging. Package identity was not recorded.' >&2
+      exit 1
+    fi
+    printf '%s %s\n' "$revision" "$configuration" > "$output/Linux/REVISION.txt"
     (
       cd "$output/Linux"
       find . -type f -print0 | sort -z | xargs -0 sha256sum
@@ -61,6 +65,10 @@ case "$action" in
     ;;
   smoke)
     package=$(realpath -e -- "${1:?Supply the Linux package directory}")
+    if ! grep -Eq '^[a-f0-9]{40} Development$' "$package/REVISION.txt"; then
+      echo 'Smoke requires a manifest-bearing Development package with runtime logging.' >&2
+      exit 2
+    fi
     profile=$(mktemp -d "$storage/smoke.XXXXXX")
     timeout 220 "$package/PurpleVsGreen.sh" -PvGSmoke "-userdir=$profile" \
       -windowed -ResX=1920 -ResY=1080 -NoVSync -unattended -NoCrashDialog -stdout -FullStdOutLogOutput \

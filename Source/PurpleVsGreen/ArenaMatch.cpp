@@ -299,6 +299,8 @@ void AArenaMatch::StartMatch()
     const double Now = GetWorld()->GetTimeSeconds();
     PlayerHits = 0;
     PlayerDamageEvents = 0;
+    NavigationRecoveries = 0;
+    Respawns = 0;
     LastPlayerHitAt = -10.;
     LastPlayerHurtAt = -10.;
     Rules.Start(ScoreLimit, Minutes * 60., Now);
@@ -340,8 +342,9 @@ void AArenaMatch::Finish()
     LocalController->SetViewTarget(Overview);
     LocalController->ShowResults();
     Feedback(Overview->GetActorLocation(), 7, .82f);
-    UE_LOG(LogTemp, Display, TEXT("PvG round result: Purple %d Green %d Player hits %d Player damage %d"),
-        Rules.Score[0], Rules.Score[1], PlayerHits, PlayerDamageEvents);
+    UE_LOG(LogTemp, Display,
+        TEXT("PvG round result: Purple %d Green %d Player hits %d Player damage %d Respawns %d Route recoveries %d"),
+        Rules.Score[0], Rules.Score[1], PlayerHits, PlayerDamageEvents, Respawns, NavigationRecoveries);
 }
 
 void AArenaMatch::Tick(float DeltaSeconds)
@@ -363,6 +366,7 @@ void AArenaMatch::Tick(float DeltaSeconds)
         if (!Soldier->Rules.Alive() && Now >= Soldier->RespawnAt)
         {
             Soldier->Respawn(SelectSpawn(Soldier->Team, Index));
+            ++Respawns;
             Bots[Index] = {};
             Bots[Index].Patrol = Index;
         }
@@ -484,10 +488,7 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
     for (const auto& Pair : Hits)
     {
         if (Pair.Key->ReceiveSpell(Caster, Pair.Value))
-        {
-            MarkHit(Caster, Pair.Key);
             Feedback(Pair.Key->GetActorLocation(), 4, .56f);
-        }
     }
 }
 
@@ -538,10 +539,7 @@ void AArenaMatch::Explode(AArenaSoldier* Caster, FVector Location)
             (Trace(Location, Target->GetActorLocation(), Caster, Impact) && Impact.GetActor() != Target))
             continue;
         const float Damage = Spec.Damage * FMath::Lerp(1.f, .32f, Distance / Spec.BlastRadius);
-        if (Target->ReceiveSpell(Caster, Damage))
-        {
-            MarkHit(Caster, Target);
-        }
+        Target->ReceiveSpell(Caster, Damage);
     }
 }
 
@@ -557,6 +555,20 @@ void AArenaMatch::MarkHit(const AArenaSoldier* Caster, const AArenaSoldier* Vict
     {
         ++PlayerDamageEvents;
         LastPlayerHurtAt = Now;
+    }
+}
+
+void AArenaMatch::ShowWard(const AArenaSoldier* Soldier)
+{
+    const FVector Center = Soldier->GetActorLocation() + FVector(0, 0, 30);
+    const FLinearColor Tint(.19f, .74f, .93f);
+    for (int Segment = 0; Segment < 10; ++Segment)
+    {
+        const double A = Segment * UE_PI / 5.;
+        const double B = (Segment + 1) * UE_PI / 5.;
+        const FVector From = Center + FVector(FMath::Cos(A), FMath::Sin(A), .16 * FMath::Sin(A * 2.)) * 64.;
+        const FVector To = Center + FVector(FMath::Cos(B), FMath::Sin(B), .16 * FMath::Sin(B * 2.)) * 64.;
+        Beam(From, To, Tint, 3.f, .26f);
     }
 }
 

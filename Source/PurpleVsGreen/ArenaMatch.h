@@ -26,6 +26,7 @@ struct FArenaBot
     int Patrol = 0;
     PvG::Spell Spell = PvG::Spell::Thread;
     bool Visible = false;
+    bool Patrolling = false;
 };
 
 struct FArenaMissile
@@ -50,6 +51,8 @@ public:
     void ReturnToMenu();
     void Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Direction);
     void Defeated(AArenaSoldier* Soldier, AArenaSoldier* Killer);
+    void MarkHit(const AArenaSoldier* Caster, const AArenaSoldier* Victim);
+    void ShowWard(const AArenaSoldier* Soldier);
     void Feedback(FVector Location, int Event, float Volume = 1.f);
     UMaterialInstanceDynamic* Paint(UObject* Outer, FLinearColor Color) const;
     bool IsPlaying() const { return Rules.State == PvG::Phase::Playing; }
@@ -73,7 +76,6 @@ private:
     void BuildArena();
     void BuildRoutes();
     void BuildSounds();
-    void MarkHit(const AArenaSoldier* Caster, const AArenaSoldier* Victim);
     void ClearRound();
     void UpdateBot(int Index, float DeltaSeconds, double Now);
     void Think(AArenaSoldier* Soldier, FArenaBot& Brain, double Now);
@@ -84,7 +86,7 @@ private:
     void Beam(FVector From, FVector To, FLinearColor Tint, float Width, float Duration);
     bool Trace(FVector From, FVector To, const AActor* Ignore, FHitResult& Hit) const;
     bool Walkable(FVector From, FVector To) const;
-    int NearestNode(FVector Point) const;
+    int NearestNode(FVector Point, bool RequireLine) const;
     TArray<int> FindRoute(int From, int To) const;
     FTransform SelectSpawn(PvG::Team Side, int Slot) const;
     AActor* Mesh(UStaticMesh* Shape, UMaterialInterface* Material, const FTransform& Transform,
@@ -99,6 +101,8 @@ private:
     UPROPERTY() TArray<TObjectPtr<AArenaSoldier>> Soldiers;
     UPROPERTY() TObjectPtr<USoundAttenuation> SpatialAudio;
     TArray<TArray<uint8>> SoundSamples;
+    int NavigationRecoveries = 0;
+    int Respawns = 0;
     TArray<FArenaBot> Bots;
     TArray<FArenaMissile> Missiles;
     TArray<FVector> Nodes;
