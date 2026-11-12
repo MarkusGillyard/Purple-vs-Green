@@ -65,6 +65,8 @@ private:
     UPROPERTY() TObjectPtr<UCameraComponent> Camera;
     UPROPERTY() TObjectPtr<UPoseableMeshComponent> Battlemage;
     UPROPERTY() TObjectPtr<UMaterialInterface> ArmorMaterial;
+    UPROPERTY() TObjectPtr<UMaterialInterface> BracerMaterial;
+    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Bracers;
     UPROPERTY() TObjectPtr<USceneComponent> CastingHands;
     UPROPERTY() TObjectPtr<USceneComponent> CastingRight;
     UPROPERTY() TObjectPtr<USceneComponent> CastingLeft;

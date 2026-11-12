@@ -32,7 +32,7 @@ data.set_editor_property("srgb", False)
 data.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
 unreal.EditorAssetLibrary.save_loaded_asset(data)
 
-for name in ("SM_MeridianRidge", "SM_MeridianCrystal", "SM_MeridianVambrace", "SM_MeridianReeds"):
+for name in ("SM_MeridianRidge", "SM_MeridianCrystal", "SM_MeridianVambrace", "SM_MeridianReeds", "SM_MeridianAshlar"):
     options = unreal.FbxImportUI()
     options.automated_import_should_detect_type = False
     options.mesh_type_to_import = unreal.FBXImportType.FBXIT_STATIC_MESH
@@ -132,6 +132,38 @@ edit.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
 edit.connect_material_property(surface_normal, "", unreal.MaterialProperty.MP_NORMAL)
 edit.connect_material_property(scalar(stone, "Metallic", 0., (-350, 510)), "", unreal.MaterialProperty.MP_METALLIC)
 save(stone)
+
+vambrace = material("M_MeridianVambrace")
+armor_data = edit.create_material_expression(vambrace, unreal.MaterialExpressionTextureObject, -750, 100)
+armor_data.set_editor_property("texture", data)
+armor_data.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+uv = edit.create_material_expression(vambrace, unreal.MaterialExpressionTextureCoordinate, -750, -90)
+dye = edit.create_material_expression(vambrace, unreal.MaterialExpressionVectorParameter, -750, -280)
+dye.set_editor_property("parameter_name", "Color")
+dye.set_editor_property("default_value", unreal.LinearColor(.20, .47, .28, 1.))
+armor_color = custom(vambrace, """
+float3 wear = Texture2DSample(Surface, SurfaceSampler, UV * float2(1.4, 2.7)).rgb;
+float edge = min(UV.x, 1.0 - UV.x);
+float tip = min(UV.y, 1.0 - UV.y);
+float chevron = abs(tip - (0.13 + abs(UV.x - .5) * .25));
+float border = (1.0 - smoothstep(.007, .014, abs(edge - .10))) *
+               smoothstep(.06, .17, tip);
+float stamp = (1.0 - smoothstep(.006, .015, chevron)) *
+               smoothstep(.13, .24, edge);
+float enamel = smoothstep(.17, .24, edge) * smoothstep(.18, .28, tip);
+float3 steel = float3(.071, .091, .103) * (.77 + .61 * wear.r);
+float3 panel = lerp(steel, Tint * (.19 + wear.r * .37), enamel * .82);
+float3 inlay = float3(.46, .282, .097) * (.70 + .38 * wear.r);
+return lerp(panel, inlay, max(border, stamp) * .85);
+""", {"UV": (uv, ""), "Surface": (armor_data, ""), "Tint": (dye, "RGB")}, (-410, -170), vector)
+armor_roughness = custom(vambrace, """
+float2 p = UV * float2(1.8, 3.4);
+return .39 + Texture2DSample(Surface, SurfaceSampler, p).g * .29;
+""", {"UV": (uv, ""), "Surface": (armor_data, "")}, (-410, 130), number)
+edit.connect_material_property(armor_color, "", unreal.MaterialProperty.MP_BASE_COLOR)
+edit.connect_material_property(armor_roughness, "", unreal.MaterialProperty.MP_ROUGHNESS)
+edit.connect_material_property(scalar(vambrace, "Metallic", .64, (-400, 350)), "", unreal.MaterialProperty.MP_METALLIC)
+save(vambrace)
 
 ridge = material("M_MeridianRidge")
 ridge.set_editor_property("used_with_instanced_static_meshes", True)

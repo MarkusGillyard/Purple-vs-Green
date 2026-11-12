@@ -42,6 +42,8 @@ AArenaSoldier::AArenaSoldier()
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> Surface(
         TEXT("/Game/Materials/M_Armor.M_Armor"));
     ArmorMaterial = Surface.Object;
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Engraving(TEXT("/Game/Materials/M_MeridianVambrace.M_MeridianVambrace"));
+    BracerMaterial = Engraving.Object;
     Battlemage = CreateDefaultSubobject<UPoseableMeshComponent>(TEXT("Battlemage"));
     Battlemage->SetupAttachment(RootComponent);
     Battlemage->SetSkinnedAssetAndUpdate(Body.Object);
@@ -60,6 +62,7 @@ AArenaSoldier::AArenaSoldier()
         Shape->SetOnlyOwnerSee(true);
         Shape->SetCastShadow(false);
         (Metal ? Trim : Dyed ? Livery : Armor).Add(Shape);
+        return Shape;
     };
     for (const int Side : {-1, 1})
     {
@@ -74,11 +77,10 @@ AArenaSoldier::AArenaSoldier()
         auto Segment = [&](const TCHAR* Label, UStaticMesh* Mesh, FVector Location, FVector Scale,
                            FRotator Angle, bool Dyed, bool Metal = false)
         {
-            GauntletPart(FName(Prefix + Label), Wrist, Mesh, Location, Scale, Angle, Dyed, Metal);
+            return GauntletPart(FName(Prefix + Label), Wrist, Mesh, Location, Scale, Angle, Dyed, Metal);
         };
         Segment(TEXT("Sleeve"), Cylinder.Object, {-18, 0, -2}, {.142, .147, .47}, {90, 0, 0}, false);
-        Segment(TEXT("Bracer"), Vambrace.Object, {-17, 0, -1.5}, {.34, .30, .36}, {90, 0, 0}, true);
-        Segment(TEXT("BracerSpine"), Box.Object, {-15, 0, 14.3}, {.22, .015, .014}, {0, 0, 0}, false, true);
+        Bracers.Add(Segment(TEXT("Bracer"), Vambrace.Object, {-17, 0, -1.5}, {.34, .30, .36}, {90, 0, 0}, false));
         for (const int Edge : {-1, 1})
         {
             const FString Rivet = FString::Printf(TEXT("BraceRivet%d"), Edge + 1);
@@ -164,6 +166,13 @@ void AArenaSoldier::SetTeamAppearance()
         Part->SetMaterial(0, Enamel);
     for (UStaticMeshComponent* Part : Trim)
         Part->SetMaterial(0, Bronze);
+    if (BracerMaterial)
+    {
+        UMaterialInstanceDynamic* Engraved = UMaterialInstanceDynamic::Create(BracerMaterial, this);
+        Engraved->SetVectorParameterValue(TEXT("Color"), Dye);
+        for (UStaticMeshComponent* Part : Bracers)
+            Part->SetMaterial(0, Engraved);
+    }
 
     const auto Surface = [this](FName Name, UMaterialInterface* Material)
     {

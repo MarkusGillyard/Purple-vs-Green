@@ -60,6 +60,8 @@ AArenaMatch::AArenaMatch()
     CrystalMesh = Crystal.Object;
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Reeds(TEXT("/Game/Meridian/SM_MeridianReeds.SM_MeridianReeds"));
     ReedsMesh = Reeds.Object;
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Ashlar(TEXT("/Game/Meridian/SM_MeridianAshlar.SM_MeridianAshlar"));
+    AshlarMesh = Ashlar.Object;
 }
 
 void AArenaMatch::StartPlay()
@@ -129,7 +131,20 @@ void AArenaMatch::BuildArena()
     auto Block = [this](FVector Position, FVector Dimensions, UMaterialInterface* Mat,
                         bool Solid = true, float Yaw = 0.f)
     {
-        Mesh(Cube, Mat, FTransform(FRotator(0, Yaw, 0), Position, Dimensions / 100.), Solid);
+        const FTransform Pose(FRotator(0, Yaw, 0), Position, Dimensions / 100.);
+        if (!AshlarMesh || Dimensions.GetMin() < 62. || Dimensions.GetMax() > Dimensions.GetMin() * 5.)
+        {
+            Mesh(Cube, Mat, Pose, Solid);
+            return;
+        }
+        if (Solid)
+        {
+            AStaticMeshActor* Collision = CastChecked<AStaticMeshActor>(Mesh(Cube, Mat, Pose, true));
+            Collision->GetStaticMeshComponent()->SetVisibility(false);
+            Collision->GetStaticMeshComponent()->SetCastShadow(false);
+        }
+        AStaticMeshActor* Visible = CastChecked<AStaticMeshActor>(Mesh(AshlarMesh, Mat, Pose, false));
+        Visible->GetStaticMeshComponent()->SetCastShadow(Solid);
     };
 
     UMaterialInterface* Base = Material({.092f, .107f, .116f}, 450.f);

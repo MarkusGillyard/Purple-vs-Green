@@ -13,7 +13,7 @@ bpy.context.scene.unit_settings.scale_length = .01
 out = Path(sys.argv[sys.argv.index("--") + 1])
 
 
-def export(name, vertices, polygons, palette=None, smooth=False):
+def export(name, vertices, polygons, palette=None, smooth=False, uvs=None):
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(vertices, [], polygons)
     mesh.update()
@@ -23,6 +23,10 @@ def export(name, vertices, polygons, palette=None, smooth=False):
         color = mesh.color_attributes.new(name="Surface", type="BYTE_COLOR", domain="POINT")
         for entry, value in zip(color.data, palette):
             entry.color_srgb = (*value, 1)
+    if uvs:
+        uv_layer = mesh.uv_layers.new(name="Surface")
+        for corner, loop in zip(uv_layer.data, mesh.loops):
+            corner.uv = uvs[loop.vertex_index]
     for face in mesh.polygons:
         face.use_smooth = smooth
     bpy.ops.object.select_all(action="DESELECT")
@@ -106,7 +110,8 @@ for y in range(len(rows) - 1):
     a = y * cols
     b = a + segments
     faces.extend(((a, a + cols, a + cols + half, a + half), (b, b + half, b + cols + half, b + cols)))
-export("SM_MeridianVambrace", vertices, faces)
+uvs = [((i % cols) / segments, (point[2] + 50) / 100) for i, point in enumerate(vertices)]
+export("SM_MeridianVambrace", vertices, faces, uvs=uvs)
 
 rng = random.Random(4072)
 vertices, faces, colors = [], [], []
@@ -128,3 +133,13 @@ for _ in range(27):
         quad = (a, a + 1, a + 3, a + 2)
         faces.extend((quad, quad[::-1]))
 export("SM_MeridianReeds", vertices, faces, colors)
+
+# Chamfered ashlar is rendered over the existing simple cover collision.
+bpy.ops.mesh.primitive_cube_add(size=100.)
+block = bpy.context.object
+bevel = block.modifiers.new("Worn edges", "BEVEL")
+bevel.width = 4.2
+bevel.segments = 2
+bpy.ops.object.modifier_apply(modifier=bevel.name)
+export("SM_MeridianAshlar", [tuple(v.co) for v in block.data.vertices],
+       [tuple(face.vertices) for face in block.data.polygons])

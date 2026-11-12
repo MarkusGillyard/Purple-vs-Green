@@ -129,6 +129,7 @@ private:
     UPROPERTY() TObjectPtr<UMaterialInterface> RidgeMaterial;
     UPROPERTY() TObjectPtr<UStaticMesh> RidgeMesh;
     UPROPERTY() TObjectPtr<UStaticMesh> CrystalMesh;
+    UPROPERTY() TObjectPtr<UStaticMesh> AshlarMesh;
     UPROPERTY() TObjectPtr<UStaticMesh> ReedsMesh;
     UPROPERTY() TObjectPtr<AActor> MeridianCore;
     UPROPERTY() TArray<TObjectPtr<AArenaSoldier>> Soldiers;
