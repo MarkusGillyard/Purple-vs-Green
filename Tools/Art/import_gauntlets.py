@@ -106,3 +106,7 @@ for name in ("SM_CastingArm_R", "SM_CastingArm_L", "SM_CastingFinger", "SM_Casti
     unreal.log(f"PvG {name} bounds {bounds}, slots {slots}")
     if bounds.max.x < 3. or ("Arm" in name and bounds.min.x > -40.):
         raise RuntimeError(f"{name} did not import forward along +X")
+    if "Arm" in name:
+        side = 1. if name.endswith("_R") else -1.
+        if side * (bounds.max.y + bounds.min.y) < 1.:
+            raise RuntimeError(f"{name} imported with mirrored lateral geometry: {bounds}")

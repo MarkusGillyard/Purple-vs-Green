@@ -69,9 +69,9 @@ class Mesh:
         self.add(rings, slot)
 
     def export(self, name, side=1):
-        # The Unreal importer converts FBX front (-Y) to engine forward (+X).
-        vertices = [(side * y, -x, z) for x, y, z in self.vertices]
-        faces = self.faces if side == 1 else [face[::-1] for face in self.faces]
+        # Unreal's FBX conversion maps Blender -Y to forward and -X to right.
+        vertices = [(-side * y, -x, z) for x, y, z in self.vertices]
+        faces = self.faces if side == -1 else [face[::-1] for face in self.faces]
         data = bpy.data.meshes.new(name)
         data.from_pydata(vertices, [], faces)
         data.update()
