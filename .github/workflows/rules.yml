@@ -1,0 +1,16 @@
+name: Arena rules
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: Tests/run.sh
+      - run: git diff --check

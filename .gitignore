@@ -1,8 +1,8 @@
-/Binaries/
-/DerivedDataCache/
-/Intermediate/
-/Saved/
-/Builds/
+/Binaries
+/DerivedDataCache
+/Intermediate
+/Saved
+/Builds
 .vscode/
 .idea/
 *.sln
