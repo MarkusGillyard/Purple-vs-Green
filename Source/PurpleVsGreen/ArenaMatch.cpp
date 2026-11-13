@@ -627,7 +627,8 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
         }
         const FVector Origin = From + Direction * 42.;
         AActor* Orb = Mesh(CrystalMesh ? CrystalMesh.Get() : Sphere.Get(), Paint(this, Tint, true),
-            FTransform(Direction.Rotation(), Hand, FVector(.29, .29, .41)), false);
+            FTransform(FRotationMatrix::MakeFromZ(Direction).Rotator(), Hand,
+                CrystalMesh ? FVector(.18, .18, .25) : FVector(.21, .21, .39)), false);
         Beam(Hand, Origin + Direction * 38., Tint * .56f, 2.6f, .06f);
         Missiles.Add({Caster, Orb, Origin, Direction, Spec.Range, Hand - Origin});
         return;

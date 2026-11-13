@@ -187,7 +187,9 @@ void AArenaMatch::UpdateWard(const AArenaSoldier* Soldier, double Now)
 
     Mesh->SetVisibility(true);
     const double Fade = FMath::Clamp(FMath::Min(TimeLeft / .24, (1.65 - TimeLeft) / .13), .0, 1.);
-    const FVector Center = Soldier->GetActorLocation() + FVector(0, 0, 31);
+    const bool FirstPerson = Soldier == PlayerSoldier();
+    const FVector Center = Soldier->GetActorLocation() + FVector(0, 0, FirstPerson ? 24. : 31.);
+    const double FacetSize = FirstPerson ? .65 : 1.;
     TArray<FTransform, TInlineAllocator<WardFacets>> Facets;
     for (int Index = 0; Index < WardFacets; ++Index)
     {
@@ -195,7 +197,7 @@ void AArenaMatch::UpdateWard(const AArenaSoldier* Soldier, double Now)
         const FVector Radial(FMath::Cos(Angle), FMath::Sin(Angle), 0.);
         const FVector Position = Center + Radial * (51. + 8. * Fade) + FVector(0, 0, 16. * FMath::Sin(Angle * 2.));
         Facets.Emplace(FRotator(0, FMath::RadiansToDegrees(Angle), 32.), Position,
-            FVector(.043, .061, .15) * Fade);
+            FVector(.043, .061, .15) * (Fade * FacetSize));
     }
     Mesh->BatchUpdateInstancesTransforms(0, MakeArrayView(Facets), false, true, true);
 }
