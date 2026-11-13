@@ -20,6 +20,7 @@
 #include "Engine/StaticMeshActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "NiagaraSystem.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundWaveProcedural.h"
 #include "UObject/ConstructorHelpers.h"
@@ -62,6 +63,9 @@ AArenaMatch::AArenaMatch()
     ReedsMesh = Reeds.Object;
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Ashlar(TEXT("/Game/Meridian/SM_MeridianAshlar.SM_MeridianAshlar"));
     AshlarMesh = Ashlar.Object;
+    static ConstructorHelpers::FObjectFinder<UNiagaraSystem> Burst(
+        TEXT("/Niagara/DefaultAssets/Templates/Systems/DirectionalBurstLightweight.DirectionalBurstLightweight"));
+    CometBurst = Burst.Object;
 }
 
 void AArenaMatch::StartPlay()
@@ -401,6 +405,7 @@ AArenaSoldier* AArenaMatch::PlayerSoldier() const
 
 void AArenaMatch::ClearRound()
 {
+    ClearSpellEffects();
     if (LocalController && LocalController->GetPawn())
         LocalController->UnPossess();
     for (AArenaSoldier* Soldier : Soldiers)
@@ -466,6 +471,11 @@ void AArenaMatch::ReturnToMenu()
 
 void AArenaMatch::Finish()
 {
+    for (const FArenaMissile& Missile : Missiles)
+        if (Missile.Visual.IsValid())
+            Missile.Visual->Destroy();
+    Missiles.Reset();
+    ClearSpellEffects();
     for (AArenaSoldier* Soldier : Soldiers)
     {
         Soldier->SetSprinting(false);
@@ -512,6 +522,7 @@ void AArenaMatch::Tick(float DeltaSeconds)
             Bots[Index] = {};
             Bots[Index].Patrol = Index;
         }
+        UpdateWard(Soldier, Now);
         if (Index != 0 && Soldier->Rules.Alive())
             UpdateBot(Index, DeltaSeconds, Now);
     }
@@ -596,10 +607,10 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
     if (Caster == PlayerSoldier())
         LocalController->PulseGamepad(Spell == PvG::Spell::Thread ? .13f : .29f, .11f);
     const FVector From = Caster->Eye();
-    const FVector Hand = From + Direction * 55. + Direction.Rotation().RotateVector(FVector(0, 19, -21));
+    const FVector Hand = Caster->SpellOrigin();
     const FLinearColor Tint = SpellTint(Spell);
     Feedback(From, PvG::Index(Spell), .58f);
-    Spark(Hand, Tint, 5.f + PvG::Index(Spell) * 1.7f, .068f);
+    Spark(Hand, Tint, 3.5f + PvG::Index(Spell) * 1.4f, .048f);
     EmitMotes(PvG::Index(Spell), Hand, Direction, Spell == PvG::Spell::Thread ? 3 : 8, .38f, 215.f);
 
     if (Spec.ProjectileSpeed > 0.f)
@@ -614,9 +625,10 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
             return;
         }
         const FVector Origin = From + Direction * 42.;
-        AActor* Orb = Mesh(Sphere, Paint(this, Tint, true), FTransform(Direction.Rotation(), Origin,
-            FVector(.42, .29, .29)), false);
-        Missiles.Add({Caster, Orb, Origin, Direction, Spec.Range});
+        AActor* Orb = Mesh(CrystalMesh ? CrystalMesh.Get() : Sphere.Get(), Paint(this, Tint, true),
+            FTransform(Direction.Rotation(), Hand, FVector(.29, .29, .41)), false);
+        Beam(Hand, Origin + Direction * 38., Tint * .56f, 2.6f, .06f);
+        Missiles.Add({Caster, Orb, Origin, Direction, Spec.Range, Hand - Origin});
         return;
     }
 
@@ -628,15 +640,13 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
         const FVector End = From + Trajectory * Spec.Range;
         const bool Blocked = Trace(From, End, Caster, Impact);
         const FVector Destination = Blocked ? Impact.ImpactPoint : End;
-        Beam(Hand, Destination, Tint, Spell == PvG::Spell::Lance ? 4.3f : 1.9f, .075f);
-        if (Spell == PvG::Spell::Lance)
-            Beam(Hand, Destination, Tint * .44f, 9.5f, .036f);
+        DrawSpellTrace(Spell, Hand, Destination);
         if (Blocked)
         {
-            Spark(Impact.ImpactPoint + Impact.ImpactNormal * 2., Tint, 4.8f, .085f);
             if (Ray == 0 || Ray == 3)
-                EmitMotes(PvG::Index(Spell), Impact.ImpactPoint + Impact.ImpactNormal * 4.,
-                    Impact.ImpactNormal, Spell == PvG::Spell::Thread ? 5 : 11, .91f, 246.f);
+                ShowSpellImpact(Spell, Impact.ImpactPoint, Impact.ImpactNormal);
+            else
+                Spark(Impact.ImpactPoint + Impact.ImpactNormal * 2., Tint, 3.2f, .056f);
             if (AArenaSoldier* Target = Cast<AArenaSoldier>(Impact.GetActor()))
                 Hits.FindOrAdd(Target) += Spec.Damage;
         }
@@ -664,10 +674,11 @@ void AArenaMatch::UpdateMissiles(float DeltaSeconds)
         if (Blocked || Missile.DistanceLeft <= 0.f)
         {
             PlayerCometImpacts += Blocked && Missile.Caster.Get() == PlayerSoldier();
-            Explode(Missile.Caster.Get(), Blocked ? Impact.Location : Destination);
+            AArenaSoldier* Caster = Missile.Caster.Get();
             if (Missile.Visual.IsValid())
                 Missile.Visual->Destroy();
             Missiles.RemoveAtSwap(Index, EAllowShrinking::No);
+            Explode(Caster, Blocked ? Impact.Location : Destination);
         }
         else
         {
@@ -678,8 +689,9 @@ void AArenaMatch::UpdateMissiles(float DeltaSeconds)
                 Missile.TrailElapsed = 0.f;
             }
             Missile.Location = Destination;
+            Missile.VisualOffset *= FMath::Exp(-DeltaSeconds * 28.f);
             if (Missile.Visual.IsValid())
-                Missile.Visual->SetActorLocation(Destination);
+                Missile.Visual->SetActorLocation(Destination + Missile.VisualOffset);
         }
     }
 }
@@ -687,12 +699,7 @@ void AArenaMatch::UpdateMissiles(float DeltaSeconds)
 void AArenaMatch::Explode(AArenaSoldier* Caster, FVector Location)
 {
     const PvG::SpellSpec& Spec = PvG::Arsenal[PvG::Index(PvG::Spell::Comet)];
-    const FLinearColor Tint = SpellTint(PvG::Spell::Comet);
-    Spark(Location, Tint * .72f, 38.f, .105f);
-    EmitMotes(PvG::Index(PvG::Spell::Comet), Location, FVector::UpVector, 29, 2.85f, 510.f);
-    for (int Ray = 0; Ray < 6; ++Ray)
-        Beam(Location, Location + EffectsRandom.VRand() * EffectsRandom.FRandRange(96.f, 238.f),
-            Tint * .71f, 2.8f, .10f);
+    ShowSpellImpact(PvG::Spell::Comet, Location, FVector::UpVector);
     Feedback(Location, 5, .84f);
     if (!Caster)
         return;
@@ -721,21 +728,6 @@ void AArenaMatch::MarkHit(const AArenaSoldier* Caster, const AArenaSoldier* Vict
         ++PlayerDamageEvents;
         LastPlayerHurtAt = Now;
         LocalController->PulseGamepad(.44f, .18f);
-    }
-}
-
-void AArenaMatch::ShowWard(const AArenaSoldier* Soldier)
-{
-    const FVector Center = Soldier->GetActorLocation() + FVector(0, 0, 30);
-    const FLinearColor Tint(.19f, .74f, .93f);
-    EmitMotes(4, Center + FVector(0, 0, 39), FVector::UpVector, 12, 1.45f, 148.f);
-    for (int Segment = 0; Segment < 10; ++Segment)
-    {
-        const double A = Segment * UE_PI / 5.;
-        const double B = (Segment + 1) * UE_PI / 5.;
-        const FVector From = Center + FVector(FMath::Cos(A), FMath::Sin(A), .16 * FMath::Sin(A * 2.)) * 64.;
-        const FVector To = Center + FVector(FMath::Cos(B), FMath::Sin(B), .16 * FMath::Sin(B * 2.)) * 64.;
-        Beam(From, To, Tint, 3.f, .26f);
     }
 }
 

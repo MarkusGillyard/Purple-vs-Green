@@ -1,6 +1,9 @@
 #include "ArenaRules.h"
+#include "CastPose.h"
+#include "KayKitCastMotion.h"
 
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 int main()
@@ -34,6 +37,23 @@ int main()
     assert(Soldier.Focus == 25.f);
     Soldier.Refill(30.f);
     assert(Soldier.Focus == FullFocus);
+
+    for (const Spell Active : {Spell::Thread, Spell::Fan, Spell::Lance, Spell::Comet})
+    {
+        const float Windup = Arsenal[Index(Active)].Windup;
+        const CastPose Before = SampleCast(Active, true, -0.00001);
+        const CastPose AtRelease = SampleCast(Active, false, 0.);
+        assert(SampleCast(Active, true, -Windup).Gather == 0.f);
+        assert(std::abs(Before.Gather - AtRelease.Gather) < 0.001f);
+        assert(std::abs(Before.Phase - AtRelease.Phase) < 0.001f);
+        assert(AtRelease.Release == 0.f);
+        assert(SampleCast(Active, false, .03).Release > 0.f);
+        const CastPose Settled = SampleCast(Active, false, Arsenal[Index(Active)].Cooldown);
+        assert(Settled.Gather == 0.f && Settled.Release == 0.f && Settled.Phase == 0.f);
+    }
+    for (const auto* Samples : {KayKit::Shoot, KayKit::Spellcasting, KayKit::SpellcastingLong, KayKit::Raise})
+        for (const int Index : {0, KayKit::CastSampleCount - 1})
+            assert(Samples[Index].Lift == 0.f && Samples[Index].Reach == 0.f && Samples[Index].Sweep == 0.f);
 
     MatchRules Match;
     assert(!Match.Eliminate(Team::Purple, Team::Green));

@@ -25,6 +25,7 @@ public:
     void Ward();
     bool ReceiveSpell(AArenaSoldier* Caster, float Damage);
     FVector Eye() const;
+    FVector SpellOrigin(bool Ward = false) const;
     void SetAim(FRotator Rotation);
     void SetSprinting(bool Enabled);
 
@@ -40,12 +41,13 @@ private:
     void Animate(float DeltaSeconds, double Now);
     void SetTeamAppearance();
     void AnimateDefeat(double Now);
-    void UpdateArmorPose(FVector LocalVelocity, float Cadence, float Pace, float Flight, float Hit, float AimPitch);
+    void UpdateArmorPose(FVector LocalVelocity, float Cadence, float Pace, float Flight, float Hit, float AimPitch, FVector MotionOffset);
     FRotator Aim = FRotator::ZeroRotator;
     double ReleaseAt = 0.;
     double LastCast = -10.;
     double LastHit = -10.;
     double LastStep = 0.;
+    double NextChargeMote = 0.;
     float Stride = 0.f;
     float PoseCast = 0.f;
     float PoseWard = 0.f;
@@ -55,6 +57,7 @@ private:
     bool WasAirborne = false;
     bool HasViewHistory = false;
     FRotator LastView = FRotator::ZeroRotator;
+    FVector PoseVelocity = FVector::ZeroVector;
     FVector2D ViewSway = FVector2D::ZeroVector;
     TArray<FTransform> ComponentReference;
     TArray<FTransform> PoseComponents;

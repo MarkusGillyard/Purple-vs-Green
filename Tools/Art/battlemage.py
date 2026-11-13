@@ -2,6 +2,7 @@
 import math
 import sys
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -120,6 +121,19 @@ plate("Pelvis", 2, [(-12,-10.7,94),(-9,-11.1,82),(-8,-12,69),(-5,-12.4,63),
                     (0,-13.2,66),(6,-12.5,63),(9,-11.5,73),(12,-10.6,94),
                     (3,-12.3,91),(-4,-11.8,92)], 1.)
 
+# Rear livery and collar keep the team readable from flanking routes.
+plate("Chest", 2, [(0, 13.7, 111), (9, 13.3, 120), (9, 11.9, 135),
+                    (0, 12.9, 139), (-9, 11.9, 135), (-9, 13.3, 120)], -1.2)
+plate("Chest", 1, [(0, 13.9, 126), (3.2, 13.7, 130), (0, 13.7, 134),
+                    (-3.2, 13.7, 130)], -.8)
+shell("Chest", 1, [(0, 0, 141, 10.4, 8.5), (0, 0, 142.2, 10.4, 8.5),
+                    (0, 0, 144, 8.9, 7.5)], sides=24)
+# A raised crown ridge breaks up the round helmet profile.
+shell("Head", 0, [(0, 2.1, 170, 3.2, 11.8), (0, 1.3, 176, 2.4, 8.1),
+                   (0, .2, 179.4, 1.5, 5.1)], sides=12)
+plate("Head", 1, [(-1.1, -13.3, 167), (1.1, -13.3, 167), (1.5, -9.8, 174.7),
+                   (0, -6.8, 177.6), (-1.5, -9.8, 174.7)], .65)
+
 for tag, side in (("L", -1), ("R", 1)):
     upper = f"UpperArm_{tag}"
     fore = f"Forearm_{tag}"
@@ -133,6 +147,12 @@ for tag, side in (("L", -1), ("R", 1)):
     shell(upper, 0, [(27*side,0,128,8.1,9.2),(26*side,0,130,10.4,10.7),(24*side,0,138,10.3,10.6),
                      (23*side,0,143,8.9,8.7),(22*side,0,146,4.6,5.5)])
     shell(upper, 0, [(27.5*side,0,124,7.1,8.1),(27*side,0,126,8.8,9.1),(26*side,0,132,9.2,9.7)])
+    x = 24.5 * side
+    plate(upper, 2, [(x - 5.7, -9.4, 136.5), (x - 2.9, -11.1, 131),
+                      (x + 3, -11.1, 131), (x + 5.7, -9.4, 136.5),
+                      (x, -10.2, 141)], 1.2)
+    plate(upper, 1, [(x - 2.2, -11.05, 135.9), (x, -11.6, 133.4),
+                      (x + 2.2, -11.05, 135.9), (x, -11.1, 138.4)], .6)
     shell(fore, 3, [(31*side,-2,85,4.1,4.4),(30*side,-1,94,5.5,5.8),(29*side,0,103,6.6,6.4),
                     (29*side,0,112,5.6,5.8)])
     for z, width in ((88, 4.9), (95, 5.8), (101, 6.5)):
@@ -179,6 +199,12 @@ for name in rig_data.bones.keys():
     ids = [i for i, owner in enumerate(weights) if owner == name]
     if ids:
         group.add(ids, 1., "REPLACE")
+editable = bmesh.new()
+editable.from_mesh(mesh)
+bmesh.ops.recalc_face_normals(editable, faces=list(editable.faces))
+editable.to_mesh(mesh)
+editable.free()
+mesh.update()
 body.parent = rig
 deform = body.modifiers.new("MeridianRig", "ARMATURE")
 deform.object = rig

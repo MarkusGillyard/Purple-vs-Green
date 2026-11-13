@@ -6,6 +6,6 @@ public class PurpleVsGreen : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "InputCore", "Slate", "SlateCore" });
-        PrivateDependencyModuleNames.Add("ApplicationCore");
+        PrivateDependencyModuleNames.AddRange(new[] { "ApplicationCore", "Niagara" });
     }
 }

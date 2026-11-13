@@ -12,6 +12,7 @@ class UMaterialInterface;
 class UStaticMesh;
 class USoundAttenuation;
 class UInstancedStaticMeshComponent;
+class UNiagaraSystem;
 
 struct FArenaBot
 {
@@ -37,6 +38,7 @@ struct FArenaMissile
     FVector Location;
     FVector Direction;
     float DistanceLeft = 0.f;
+    FVector VisualOffset;
     float TrailElapsed = 0.f;
 };
 
@@ -72,6 +74,7 @@ public:
     void Defeated(AArenaSoldier* Soldier, AArenaSoldier* Killer);
     void MarkHit(const AArenaSoldier* Caster, const AArenaSoldier* Victim);
     void ShowWard(const AArenaSoldier* Soldier);
+    void ShowCharge(const AArenaSoldier* Soldier, PvG::Spell Spell, float Strength);
     void Feedback(FVector Location, int Event, float Volume = 1.f);
     UMaterialInstanceDynamic* Paint(UObject* Outer, FLinearColor Color, bool Luminous = false) const;
     bool IsPlaying() const { return Rules.State == PvG::Phase::Playing; }
@@ -101,6 +104,10 @@ private:
     void BuildMotes();
     void EmitMotes(int Batch, FVector Location, FVector Axis, int Count, float Spread, float Speed);
     void UpdateMotes(float DeltaSeconds);
+    void ClearSpellEffects();
+    void UpdateWard(const AArenaSoldier* Soldier, double Now);
+    void ShowSpellImpact(PvG::Spell Spell, FVector Location, FVector Normal);
+    void DrawSpellTrace(PvG::Spell Spell, FVector From, FVector To);
     void ClearRound();
     void ViewOverview() const;
     void UpdateBot(int Index, float DeltaSeconds, double Now);
@@ -144,6 +151,8 @@ private:
     TArray<FVector> Spawns[2];
     FRandomStream Random{8119};
     FRandomStream EffectsRandom{2573};
+    UPROPERTY() TObjectPtr<UNiagaraSystem> CometBurst;
     UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> MoteMeshes;
+    UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> WardMeshes;
     FArenaMotePool MotePools[5];
 };

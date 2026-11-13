@@ -195,6 +195,7 @@ void AArenaSoldier::Respawn(const FTransform& Spawn)
     WasAirborne = false;
     HasViewHistory = false;
     ViewSway = FVector2D::ZeroVector;
+    PoseVelocity = FVector::ZeroVector;
     LastCast = -10.;
     LastHit = -10.;
     LastStep = GetWorld()->GetTimeSeconds();
@@ -213,6 +214,23 @@ FVector AArenaSoldier::Eye() const
     return Camera->GetComponentLocation();
 }
 
+FVector AArenaSoldier::SpellOrigin(bool Ward) const
+{
+    if (Controller && Controller->IsLocalPlayerController())
+    {
+        const USceneComponent* Wrist = Ward ? CastingLeft : CastingRight;
+        const FVector Palm = Wrist->GetRelativeTransform().TransformPosition({11., 0., 1.5});
+        const FVector InView = CastingHands->GetRelativeTransform().TransformPosition(Palm);
+        return Eye() + Controller->GetControlRotation().RotateVector(InView);
+    }
+
+    const FName Hand = Ward ? TEXT("Hand_L") : TEXT("Hand_R");
+    const int Bone = Battlemage->GetBoneIndex(Hand);
+    if (PoseComponents.IsValidIndex(Bone))
+        return Battlemage->GetComponentTransform().TransformPosition(PoseComponents[Bone].GetTranslation());
+    return GetActorLocation() + GetActorForwardVector() * 20. + FVector(0, 0, 38);
+}
+
 void AArenaSoldier::SetSprinting(bool Enabled)
 {
     GetCharacterMovement()->MaxWalkSpeed = Enabled ? 820.f : 590.f;
@@ -226,6 +244,7 @@ void AArenaSoldier::Cast(PvG::Spell Spell)
     if (!Rules.StartCast(Spell, Now, ReleaseAt))
         return;
     Rules.ProtectedUntil = Now;
+    NextChargeMote = Now;
     if (ReleaseAt <= Now)
         Release();
     else
@@ -236,6 +255,7 @@ void AArenaSoldier::Release()
 {
     Rules.Charging = false;
     LastCast = GetWorld()->GetTimeSeconds();
+    Animate(0.f, LastCast);
     Arena->Fire(this, Rules.ActiveSpell, Controller ? Controller->GetControlRotation().Vector() : Aim.Vector());
 }
 
@@ -290,4 +310,10 @@ void AArenaSoldier::Tick(float DeltaSeconds)
     if (Rules.Charging && Now >= ReleaseAt)
         Release();
     Animate(DeltaSeconds, Now);
+    if (Rules.Charging && Now >= NextChargeMote)
+    {
+        const float Windup = PvG::Arsenal[PvG::Index(Rules.ActiveSpell)].Windup;
+        Arena->ShowCharge(this, Rules.ActiveSpell, 1.f - static_cast<float>(ReleaseAt - Now) / Windup);
+        NextChargeMote = Now + .043;
+    }
 }

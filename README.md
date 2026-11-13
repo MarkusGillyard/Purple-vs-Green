@@ -21,7 +21,7 @@ Focus recovers on its own. Witchthread is fast, Briar Fan is strongest up close,
 
 ## Build and run
 
-Use Unreal Engine 5.8.4 (CL 58902052) with the bundled Linux Clang 20.1.8 SDK and a Vulkan-capable GPU. Clone the private repository to the development drive to place project intermediates there. Set these paths for your installation and an existing directory on that drive.
+Use Unreal Engine 5.8.4 (CL 58902052) with the bundled Linux Clang 20.1.8 SDK and a Vulkan-capable GPU. Clone the public repository to the development drive to place project intermediates there. Set these paths for your installation and an existing directory on that drive.
 
 ```bash
 export PVG_ENGINE=/path/to/UE_5.8.4

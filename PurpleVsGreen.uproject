@@ -6,6 +6,7 @@
   "Modules": [
     { "Name": "PurpleVsGreen", "Type": "Runtime", "LoadingPhase": "Default" }
   ],
+  "Plugins": [{ "Name": "Niagara", "Enabled": true }],
   "DisableEnginePluginsByDefault": true,
   "TargetPlatforms": [ "Linux" ]
 }
