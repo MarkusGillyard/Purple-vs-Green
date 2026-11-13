@@ -64,7 +64,7 @@ AArenaMatch::AArenaMatch()
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Ashlar(TEXT("/Game/Meridian/SM_MeridianAshlar.SM_MeridianAshlar"));
     AshlarMesh = Ashlar.Object;
     static ConstructorHelpers::FObjectFinder<UNiagaraSystem> Burst(
-        TEXT("/Niagara/DefaultAssets/Templates/Systems/DirectionalBurstLightweight.DirectionalBurstLightweight"));
+        TEXT("/Niagara/DefaultAssets/Templates/Systems/DirectionalBurst.DirectionalBurst"));
     CometBurst = Burst.Object;
 }
 
@@ -621,6 +621,7 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
         if (Trace(From, From + Direction * 45., Caster, Obstruction))
         {
             PlayerCometImpacts += Player;
+            ShowSpellImpact(Spell, Obstruction.ImpactPoint, Obstruction.ImpactNormal);
             Explode(Caster, Obstruction.ImpactPoint + Obstruction.ImpactNormal * 4.);
             return;
         }
@@ -678,6 +679,8 @@ void AArenaMatch::UpdateMissiles(float DeltaSeconds)
             if (Missile.Visual.IsValid())
                 Missile.Visual->Destroy();
             Missiles.RemoveAtSwap(Index, EAllowShrinking::No);
+            ShowSpellImpact(PvG::Spell::Comet, Blocked ? Impact.ImpactPoint : Destination,
+                Blocked ? Impact.ImpactNormal : FVector::UpVector);
             Explode(Caster, Blocked ? Impact.Location : Destination);
         }
         else
@@ -699,7 +702,6 @@ void AArenaMatch::UpdateMissiles(float DeltaSeconds)
 void AArenaMatch::Explode(AArenaSoldier* Caster, FVector Location)
 {
     const PvG::SpellSpec& Spec = PvG::Arsenal[PvG::Index(PvG::Spell::Comet)];
-    ShowSpellImpact(PvG::Spell::Comet, Location, FVector::UpVector);
     Feedback(Location, 5, .84f);
     if (!Caster)
         return;

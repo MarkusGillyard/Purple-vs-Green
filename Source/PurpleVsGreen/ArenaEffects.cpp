@@ -133,9 +133,7 @@ void AArenaMatch::DrawSpellTrace(PvG::Spell Spell, FVector From, FVector To)
     }
     else if (Spell == PvG::Spell::Fan)
     {
-        const FVector Split = FMath::Lerp(From, To, .25);
-        Beam(From, Split, Tint * .53f, 1.45f, .053f);
-        Beam(Split, To, Tint, 2.55f, .091f);
+        Beam(From, To, Tint * .81f, 2.55f, .091f);
     }
     else
     {
@@ -155,7 +153,8 @@ void AArenaMatch::ShowSpellImpact(PvG::Spell Spell, FVector Location, FVector No
             FVector::DistSquared(PlayerSoldier()->Eye(), Location) < FMath::Square(3500.))
         {
             UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, CometBurst, Origin,
-                FRotator::ZeroRotator, FVector(.62), true, true, ENCPoolMethod::AutoRelease);
+                FQuat::FindBetweenNormals(FVector::UpVector, Normal).Rotator(), FVector(.50),
+                true, true, ENCPoolMethod::AutoRelease);
         }
         return;
     }
