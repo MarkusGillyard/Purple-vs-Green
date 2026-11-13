@@ -3,6 +3,8 @@
 #include "AudioMixerTypes.h"
 #include "HAL/PlatformProperties.h"
 #include "HAL/PlatformTLS.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPvGAudio, Log, All);
 
@@ -31,6 +33,8 @@ bool FSdlAudioOutput::InitializeHardware()
         UE_LOG(LogPvGAudio, Error, TEXT("SDL audio is already initialized."));
         return false;
     }
+    if (FParse::Param(FCommandLine::Get(), TEXT("RenderOffScreen")) && !SDL_getenv("SDL_AUDIODRIVER"))
+        SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
     {
         UE_LOG(LogPvGAudio, Error, TEXT("SDL audio failed to start: %s"), UTF8_TO_TCHAR(SDL_GetError()));
@@ -177,6 +181,7 @@ bool FSdlAudioOutput::CloseAudioStream()
         SDL_DestroyAudioStream(Stream);
         Stream = nullptr;
     }
+    bSuspended = false;
     AudioStreamInfo.StreamState = Audio::EAudioOutputStreamState::Closed;
     return true;
 }
@@ -216,6 +221,9 @@ bool FSdlAudioOutput::StopAudioStream()
         {
             StopGeneratingAudio();
         }
+        if (Stream && !SDL_ClearAudioStream(Stream))
+            UE_LOG(LogPvGAudio, Warning, TEXT("SDL could not clear the stopped stream: %s"), UTF8_TO_TCHAR(SDL_GetError()));
+        bSuspended = false;
         AudioStreamInfo.StreamState = Audio::EAudioOutputStreamState::Stopped;
     }
     return true;
@@ -274,9 +282,10 @@ void FSdlAudioOutput::SuspendContext()
 {
     if (!bSuspended && Stream != nullptr)
     {
-        SDL_PauseAudioStreamDevice(Stream);
-        UE_LOG(LogPvGAudio, Display, TEXT("Suspending audio."));
-        bSuspended = true;
+        if (SDL_PauseAudioStreamDevice(Stream))
+            bSuspended = true;
+        else
+            UE_LOG(LogPvGAudio, Warning, TEXT("SDL could not suspend audio: %s"), UTF8_TO_TCHAR(SDL_GetError()));
     }
 }
 
@@ -284,9 +293,10 @@ void FSdlAudioOutput::ResumeContext()
 {
     if (bSuspended && Stream != nullptr)
     {
-        SDL_ResumeAudioStreamDevice(Stream);
-        UE_LOG(LogPvGAudio, Display, TEXT("Resuming audio."));
-        bSuspended = false;
+        if (SDL_ResumeAudioStreamDevice(Stream))
+            bSuspended = false;
+        else
+            UE_LOG(LogPvGAudio, Warning, TEXT("SDL could not resume audio: %s"), UTF8_TO_TCHAR(SDL_GetError()));
     }
 }
 }

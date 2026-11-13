@@ -15,3 +15,8 @@ the output object. Unreal's render-thread priming submit is ignored unless it
 belongs to the active SDL callback. This follows the platform fix investigated
 in [Ebony Hearts](https://github.com/MarkusGillyard/Ebony-Hearts/blob/5a51e96e72a7f678340cd191de42f36e45f92a47/Docs/Validation.md#eh-07-start-up-crashes-two-causes-diagnosis-and-fix).
 PvG builds the module against the installed Unreal SDK.
+
+The implementation adapts [the owned SDL3 output in Ebony Hearts at
+`7b7f42f`](https://github.com/MarkusGillyard/Ebony-Hearts/blob/7b7f42f752c35e48662ac595886b53ed9ffa2a2e/Source/EbonyHeartsLinux/Private/EHSdlAudioOutput.cpp).
+Its independent PvG module fills SDL requests in bounded blocks and retains
+Unreal's dummy audio selection for offscreen runs.
