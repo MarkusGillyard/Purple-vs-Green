@@ -53,9 +53,10 @@ float Smooth(float Value)
 void AArenaSoldier::Animate(float DeltaSeconds, double Now)
 {
     const FVector Velocity = GetVelocity();
-    const FVector LocalVelocity = GetActorQuat().UnrotateVector(FVector(Velocity.X, Velocity.Y, 0));
-    const float AimBlend = 1.f - FMath::Exp(-DeltaSeconds * 14.f);
-    PoseVelocity = FMath::Lerp(PoseVelocity, LocalVelocity, AimBlend);
+    const FVector PlanarVelocity(Velocity.X, Velocity.Y, 0);
+    const float VelocityBlend = 1.f - FMath::Exp(-DeltaSeconds * 14.f);
+    PoseVelocity = FMath::Lerp(PoseVelocity, PlanarVelocity, VelocityBlend);
+    const FVector LocalPoseVelocity = GetActorQuat().UnrotateVector(PoseVelocity);
     const float Speed = PoseVelocity.Size2D();
     const float Pace = FMath::Clamp(Speed / 590.f, 0.f, 1.f);
     const float Cadence = FMath::GetMappedRangeValueClamped(FVector2f(35.f, 820.f), FVector2f(1.72f, 4.7f), Speed);
@@ -79,8 +80,8 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
     PoseWard = FMath::FInterpTo(PoseWard, Now < Rules.WardUntil ? 1.f : 0.f, DeltaSeconds, 16.f);
 
     const FRotator View = Controller ? Controller->GetControlRotation() : Aim;
-    UpdateArmorPose(DeltaSeconds, PoseVelocity, Cadence, Pace, AirPose, Hit, FRotator::NormalizeAxis(View.Pitch), MotionOffset);
-    if (DeltaSeconds > 0.f && Speed > 150.f && !Airborne && Now >= LastStep)
+    UpdateArmorPose(DeltaSeconds, LocalPoseVelocity, Cadence, Pace, AirPose, Hit, FRotator::NormalizeAxis(View.Pitch), MotionOffset);
+    if (DeltaSeconds > 0.f && PlanarVelocity.SizeSquared2D() > FMath::Square(150.) && !Airborne && Now >= LastStep)
     {
         Arena->Feedback(GetActorLocation(), 8, .20f + .045f * Pace);
         LastStep = Now + 1.f / Cadence;
@@ -103,7 +104,7 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
 
     const float Cycle = Stride * 2.f * UE_PI;
     const float Bob = FMath::Cos(Cycle * 2.f) * Pace * (1.f - AirPose);
-    const float Strafe = FMath::Clamp(PoseVelocity.Y / 590., -1., 1.);
+    const float Strafe = FMath::Clamp(LocalPoseVelocity.Y / 590., -1., 1.);
     const float Breath = FMath::Sin(Now * 2.65) * .28f * (1.f - Pace);
     CastingHands->SetRelativeLocation({
         ReleasePulse * Gesture.Reach - Gather * Gesture.Gather - 3.5f * AirPose - 2.f * Hit,
@@ -136,7 +137,7 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
     }
 
     Camera->SetFieldOfView(FMath::FInterpTo(Camera->FieldOfView,
-        Rules.Charging && Rules.ActiveSpell == PvG::Spell::Lance ? 74.f : (LocalVelocity.Size2D() > 635.f ? 102.f : 96.f),
+        Rules.Charging && Rules.ActiveSpell == PvG::Spell::Lance ? 74.f : (PlanarVelocity.SizeSquared2D() > FMath::Square(635.) ? 102.f : 96.f),
         DeltaSeconds, 10.f));
 }
 
