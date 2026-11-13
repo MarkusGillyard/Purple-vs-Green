@@ -544,10 +544,13 @@ void AArenaController::CycleSpell(int Step)
     }
 }
 
-void AArenaController::PulseGamepad(float Strength, float Seconds)
+void AArenaController::PulseGamepad(float Heavy, float Light, float Seconds)
 {
-    if (UsingGamepad && PadVibration && IsLocalController())
-        PlayDynamicForceFeedback(Strength, Seconds, true, false, true, true);
+    if (!UsingGamepad || !PadVibration || !IsLocalController())
+        return;
+
+    PlayDynamicForceFeedback(Heavy, Seconds, true, false, true, false);
+    PlayDynamicForceFeedback(Light, Seconds, false, true, false, true);
 }
 
 void AArenaController::DeviceConnectionChanged(EInputDeviceConnectionState State, FPlatformUserId User, FInputDeviceId)
@@ -619,7 +622,7 @@ void AArenaController::CastWard()
             const double Before = Soldier->Rules.WardUntil;
             Soldier->Ward();
             if (Soldier->Rules.WardUntil > Before)
-                PulseGamepad(.23f, .18f);
+                PulseGamepad(.75f, .30f, .24f);
         }
 }
 

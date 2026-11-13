@@ -25,7 +25,7 @@ public:
     bool IsMenuOpen() const { return Panel.IsValid(); }
     PvG::Spell GetSpell() const { return Selected; }
     bool IsUsingGamepad() const { return UsingGamepad; }
-    void PulseGamepad(float Strength, float Seconds);
+    void PulseGamepad(float Heavy, float Light, float Seconds);
 
 private:
     enum class Screen : uint8 { Main, Pause, Settings, Results };

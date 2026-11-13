@@ -605,7 +605,18 @@ void AArenaMatch::Fire(AArenaSoldier* Caster, PvG::Spell Spell, FVector Directio
         return;
     const PvG::SpellSpec& Spec = PvG::Arsenal[PvG::Index(Spell)];
     if (Caster == PlayerSoldier())
-        LocalController->PulseGamepad(Spell == PvG::Spell::Thread ? .13f : .29f, .11f);
+    {
+        struct FSpellPulse { float Heavy; float Light; float Seconds; };
+        constexpr FSpellPulse FeedbackBySpell[] = {
+            {.35f, .65f, .09f},
+            {.72f, .51f, .15f},
+            {.59f, .82f, .16f},
+            {.87f, .56f, .19f},
+        };
+        static_assert(UE_ARRAY_COUNT(FeedbackBySpell) == PvG::Index(PvG::Spell::Count));
+        const FSpellPulse& Pulse = FeedbackBySpell[PvG::Index(Spell)];
+        LocalController->PulseGamepad(Pulse.Heavy, Pulse.Light, Pulse.Seconds);
+    }
     const FVector From = Caster->Eye();
     const FVector Hand = Caster->SpellOrigin();
     const FLinearColor Tint = SpellTint(Spell);
@@ -730,7 +741,7 @@ void AArenaMatch::MarkHit(const AArenaSoldier* Caster, const AArenaSoldier* Vict
     {
         ++PlayerDamageEvents;
         LastPlayerHurtAt = Now;
-        LocalController->PulseGamepad(.44f, .18f);
+        LocalController->PulseGamepad(.83f, .55f, .20f);
     }
 }
 
