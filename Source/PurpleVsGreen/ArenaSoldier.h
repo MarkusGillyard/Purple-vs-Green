@@ -41,7 +41,7 @@ private:
     void Animate(float DeltaSeconds, double Now);
     void SetTeamAppearance();
     void AnimateDefeat(double Now);
-    void UpdateArmorPose(FVector LocalVelocity, float Cadence, float Pace, float Flight, float Hit, float AimPitch, FVector MotionOffset);
+    void UpdateArmorPose(float DeltaSeconds, FVector LocalVelocity, float Cadence, float Pace, float Flight, float Hit, float AimPitch, FVector MotionOffset);
     FRotator Aim = FRotator::ZeroRotator;
     double ReleaseAt = 0.;
     double LastCast = -10.;
@@ -53,6 +53,7 @@ private:
     float PoseWard = 0.f;
     float AirPose = 0.f;
     float Landing = 0.f;
+    double FootFloorOffsets[2]{};
     float HitSide = 1.f;
     bool WasAirborne = false;
     bool HasViewHistory = false;

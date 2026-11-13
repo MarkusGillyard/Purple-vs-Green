@@ -192,6 +192,7 @@ void AArenaSoldier::Respawn(const FTransform& Spawn)
     PoseWard = 0.f;
     AirPose = 0.f;
     Landing = 0.f;
+    FootFloorOffsets[0] = FootFloorOffsets[1] = 0.;
     WasAirborne = false;
     HasViewHistory = false;
     ViewSway = FVector2D::ZeroVector;
