@@ -70,6 +70,20 @@ def shell(owner, color, rings, sides=16, rotation=math.pi/16):
             face([bottom+k, bottom+nxt, top+nxt, top+k], smooth=True)
     face(range(first+(len(rings)-1)*sides, first+len(rings)*sides))
 
+def joint_sleeve(upper, lower, center, radius, length):
+    """Bridge the rigid plates with a flexible undersuit at the joint."""
+    x, y, z = center
+    first = len(vertices)
+    shell(lower, 3, [(x, y, z-length, radius*.86, radius*.86),
+                     (x, y, z-length*.45, radius, radius),
+                     (x, y, z, radius, radius),
+                     (x, y, z+length*.45, radius, radius),
+                     (x, y, z+length, radius*.86, radius*.86)], sides=12)
+    for ring, influence in enumerate((0., .18, .5, .82, 1.)):
+        for index in range(first + ring*12, first + (ring+1)*12):
+            weights[index] = (upper, lower, influence)
+
+
 def plate(owner, color, contour, depth):
     """An angular relief with its exposed contour facing the arena."""
     first = len(vertices)
@@ -141,6 +155,10 @@ for tag, side in (("L", -1), ("R", 1)):
     thigh = f"Thigh_{tag}"
     shin = f"Shin_{tag}"
     foot = f"Foot_{tag}"
+    joint_sleeve("Chest", upper, (21.5*side, 0, 135), 7.2, 8.5)
+    joint_sleeve(upper, fore, (29*side, 0, 108), 5.4, 8.)
+    joint_sleeve(fore, hand, (31*side, -2, 87), 3.7, 4.5)
+    joint_sleeve(thigh, shin, (12*side, -2, 48), 5.8, 8.)
     shell(upper, 3, [(27*side,0,104,5,5.3),(28*side,0,110,6.1,6.7),(26*side,0,120,7.7,7.6),
                      (23*side,0,133,8.2,8.5),(22*side,0,141,7.2,7.4)])
     shell(upper, 2, [(26*side,0,121,7.9,8),(25*side,0,128,9.4,9.4),(23*side,0,136,9.6,9.3)])
@@ -194,11 +212,16 @@ for mat in materials:
 for polygon, color, smooth in zip(mesh.polygons, colors, smoothing, strict=True):
     polygon.material_index = color
     polygon.use_smooth = smooth
-for name in rig_data.bones.keys():
-    group = body.vertex_groups.new(name=name)
-    ids = [i for i, owner in enumerate(weights) if owner == name]
-    if ids:
-        group.add(ids, 1., "REPLACE")
+groups = {name: body.vertex_groups.new(name=name) for name in rig_data.bones.keys()}
+for index, owner in enumerate(weights):
+    if isinstance(owner, tuple):
+        upper, lower, influence = owner
+        if influence > 0.:
+            groups[upper].add([index], influence, "REPLACE")
+        if influence < 1.:
+            groups[lower].add([index], 1. - influence, "REPLACE")
+    else:
+        groups[owner].add([index], 1., "REPLACE")
 editable = bmesh.new()
 editable.from_mesh(mesh)
 bmesh.ops.recalc_face_normals(editable, faces=list(editable.faces))
