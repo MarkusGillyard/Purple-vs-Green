@@ -4,7 +4,8 @@
   "Category": "Games",
   "Description": "Purple vs Green, an offline fantasy arena shooter.",
   "Modules": [
-    { "Name": "PurpleVsGreen", "Type": "Runtime", "LoadingPhase": "Default" }
+    { "Name": "PurpleVsGreen", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "PvGLinuxAudio", "Type": "Runtime", "LoadingPhase": "Default", "PlatformAllowList": ["Linux"] }
   ],
   "Plugins": [{ "Name": "Niagara", "Enabled": true }],
   "DisableEnginePluginsByDefault": true,

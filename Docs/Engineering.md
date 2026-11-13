@@ -7,3 +7,11 @@
 - Accepted casts sample the hand for release visuals. Damage and projectile collision use the original eye trace or swept projectile. The comet's visible offset settles into its collision path after launch. Impacts use the trace or sweep result. Charge motes, ward facets, and the Niagara burst have bounded lifetimes and visual randomness independent of combat.
 - Ebony Hearts uses separate Core CI and standalone run evidence tied to a revision and package hash. PvG will likewise distinguish engine-independent checks from engine and package checks. Slopperfall’s Linux launcher and asset notices inform handoff. The other Cinqic projects reinforce test isolation, permission boundaries and artifact provenance. All PvG gameplay, art and tools are new work.
 - The GitHub repository is public. Project-owned material remains all rights reserved.
+
+## Linux audio output
+
+The Linux target uses a PvG SDL3 mixer module with a request buffer owned by
+the output object. Unreal's render-thread priming submit is ignored unless it
+belongs to the active SDL callback. This follows the platform fix investigated
+in [Ebony Hearts](https://github.com/MarkusGillyard/Ebony-Hearts/blob/5a51e96e72a7f678340cd191de42f36e45f92a47/Docs/Validation.md#eh-07-start-up-crashes-two-causes-diagnosis-and-fix).
+PvG builds the module against the installed Unreal SDK.
