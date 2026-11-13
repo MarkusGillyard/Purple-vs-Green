@@ -8,5 +8,7 @@ public class PurpleVsGreenEditorTarget : TargetRules
         DefaultBuildSettings = BuildSettingsVersion.Latest;
         IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
         ExtraModuleNames.Add("PurpleVsGreen");
+        if (Target.Platform == UnrealTargetPlatform.Linux)
+            ExtraModuleNames.Add("PvGLinuxAudio");
     }
 }

@@ -24,7 +24,7 @@ ue=(env "UE-LocalDataCachePath=$storage/cache")
 case "$action" in
   build)
     bash "$engine/Engine/Build/BatchFiles/Linux/Build.sh" PurpleVsGreenEditor Linux Development \
-      "-Project=$project" -WaitMutex -NoUBA -NoUbaLocal "-MaxParallelActions=${PVG_BUILD_JOBS:-4}" "$@"
+      "-Project=$project" -WaitMutex -NoHotReloadFromIDE -NoUBA -NoUbaLocal "-MaxParallelActions=${PVG_BUILD_JOBS:-4}" "$@"
     ;;
   run)
     "${ue[@]}" "$engine/Engine/Binaries/Linux/UnrealEditor" "$project" -game -nosplash "$@"
@@ -50,7 +50,7 @@ case "$action" in
     "${ue[@]}" bash "$engine/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun \
       "-project=$project" -platform=Linux "-clientconfig=$configuration" \
       -build -cook -stage -pak -iostore -package -archive -nodebuginfo "-archivedirectory=$output" \
-      -nop4 -unattended -utf8output -nocompileuat "-ubtargs=-NoUBA -NoUbaLocal -MaxParallelActions=${PVG_BUILD_JOBS:-4}" \
+      -nop4 -unattended -utf8output -nocompileuat "-ubtargs=-NoHotReloadFromIDE -NoUBA -NoUbaLocal -MaxParallelActions=${PVG_BUILD_JOBS:-4}" \
       2>&1 | tee "$output/build.log"
     if [[ "$(git -C "$repo" rev-parse HEAD)" != "$revision" || -n "$(git -C "$repo" status --porcelain)" ]]; then
       echo 'Source changed while packaging. Package identity was not recorded.' >&2

@@ -3,6 +3,20 @@
 - Target Linux x86-64 and Vulkan on FLOWBOX (Ryzen 7 5700G, RTX 2060 6 GiB). The reference is 1920 × 1080 at 60 FPS, with frame-time measurement from the standalone build.
 - Use the existing Epic UE 5.8.4 installer (CL 58902052). Keep project caches, intermediate builds and staging on the verified Cinqic Storage device.
 - Use local C++ gameplay authority and one soldier class. Spell data and damage are shared by human and AI. Ground-route links are collision-checked when the arena starts. Bots use sight traces, short-lived last sightings and blocked-route recovery.
-- Both sides use the same skeletal battlemage, animated in place from movement, damage and casting state. The first-person rig uses mirrored glove and forearm meshes with separate knuckle and finger joints driven by the same state. Locomotion uses procedural two-bone foot placement against world geometry. Visual casts use the existing release time, and movement and hit reactions animate the viewmodel independently of the aim camera. Spell particles use bounded instance pools and a separate visual random stream. Presentation never writes to combat collision or health.
+- Both teams share the same armor, skeleton and casting logic. A time-based cast envelope blends a small KayKit hand trajectory into the articulated viewmodel and third-person arm pose. The procedural feet use world geometry as the grounding reference. The camera and spell aim remain independent of the casting pose.
+- Accepted casts sample the hand for release visuals. Damage and projectile collision use the original eye trace or swept projectile. The comet's visible offset settles into its collision path after launch. Impacts use the trace or sweep result. Charge motes, ward facets, and the Niagara burst have bounded lifetimes and visual randomness independent of combat.
 - Ebony Hearts uses separate Core CI and standalone run evidence tied to a revision and package hash. PvG will likewise distinguish engine-independent checks from engine and package checks. Slopperfall’s Linux launcher and asset notices inform handoff. The other Cinqic projects reinforce test isolation, permission boundaries and artifact provenance. All PvG gameplay, art and tools are new work.
-- The repository is private. The project carries no public license.
+- The GitHub repository is public. Project-owned material remains all rights reserved.
+
+## Linux audio output
+
+The Linux target uses a PvG SDL3 mixer module with a request buffer owned by
+the output object. Unreal's render-thread priming submit is ignored unless it
+belongs to the active SDL callback. This follows the platform fix investigated
+in [Ebony Hearts](https://github.com/MarkusGillyard/Ebony-Hearts/blob/5a51e96e72a7f678340cd191de42f36e45f92a47/Docs/Validation.md#eh-07-start-up-crashes-two-causes-diagnosis-and-fix).
+PvG builds the module against the installed Unreal SDK.
+
+The implementation adapts [the owned SDL3 output in Ebony Hearts at
+`7b7f42f`](https://github.com/MarkusGillyard/Ebony-Hearts/blob/7b7f42f752c35e48662ac595886b53ed9ffa2a2e/Source/EbonyHeartsLinux/Private/EHSdlAudioOutput.cpp).
+Its independent PvG module fills SDL requests in bounded blocks and retains
+Unreal's dummy audio selection for offscreen runs.

@@ -2,6 +2,7 @@
 import math
 import sys
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -69,6 +70,20 @@ def shell(owner, color, rings, sides=16, rotation=math.pi/16):
             face([bottom+k, bottom+nxt, top+nxt, top+k], smooth=True)
     face(range(first+(len(rings)-1)*sides, first+len(rings)*sides))
 
+def joint_sleeve(upper, lower, center, radius, length):
+    """Bridge the rigid plates with a flexible undersuit at the joint."""
+    x, y, z = center
+    first = len(vertices)
+    shell(lower, 3, [(x, y, z-length, radius*.86, radius*.86),
+                     (x, y, z-length*.45, radius, radius),
+                     (x, y, z, radius, radius),
+                     (x, y, z+length*.45, radius, radius),
+                     (x, y, z+length, radius*.86, radius*.86)], sides=12)
+    for ring, influence in enumerate((0., .18, .5, .82, 1.)):
+        for index in range(first + ring*12, first + (ring+1)*12):
+            weights[index] = (upper, lower, influence)
+
+
 def plate(owner, color, contour, depth):
     """An angular relief with its exposed contour facing the arena."""
     first = len(vertices)
@@ -120,6 +135,19 @@ plate("Pelvis", 2, [(-12,-10.7,94),(-9,-11.1,82),(-8,-12,69),(-5,-12.4,63),
                     (0,-13.2,66),(6,-12.5,63),(9,-11.5,73),(12,-10.6,94),
                     (3,-12.3,91),(-4,-11.8,92)], 1.)
 
+# Rear livery and collar keep the team readable from flanking routes.
+plate("Chest", 2, [(0, 13.7, 111), (9, 13.3, 120), (9, 11.9, 135),
+                    (0, 12.9, 139), (-9, 11.9, 135), (-9, 13.3, 120)], -1.2)
+plate("Chest", 1, [(0, 13.9, 126), (3.2, 13.7, 130), (0, 13.7, 134),
+                    (-3.2, 13.7, 130)], -.8)
+shell("Chest", 1, [(0, 0, 141, 10.4, 8.5), (0, 0, 142.2, 10.4, 8.5),
+                    (0, 0, 144, 8.9, 7.5)], sides=24)
+# A raised crown ridge breaks up the round helmet profile.
+shell("Head", 0, [(0, 2.1, 170, 3.2, 11.8), (0, 1.3, 176, 2.4, 8.1),
+                   (0, .2, 179.4, 1.5, 5.1)], sides=12)
+plate("Head", 1, [(-1.1, -13.3, 167), (1.1, -13.3, 167), (1.5, -9.8, 174.7),
+                   (0, -6.8, 177.6), (-1.5, -9.8, 174.7)], .65)
+
 for tag, side in (("L", -1), ("R", 1)):
     upper = f"UpperArm_{tag}"
     fore = f"Forearm_{tag}"
@@ -127,12 +155,22 @@ for tag, side in (("L", -1), ("R", 1)):
     thigh = f"Thigh_{tag}"
     shin = f"Shin_{tag}"
     foot = f"Foot_{tag}"
+    joint_sleeve("Chest", upper, (21.5*side, 0, 135), 7.2, 8.5)
+    joint_sleeve(upper, fore, (29*side, 0, 108), 5.4, 8.)
+    joint_sleeve(fore, hand, (31*side, -2, 87), 3.7, 4.5)
+    joint_sleeve(thigh, shin, (12*side, -2, 48), 5.8, 8.)
     shell(upper, 3, [(27*side,0,104,5,5.3),(28*side,0,110,6.1,6.7),(26*side,0,120,7.7,7.6),
                      (23*side,0,133,8.2,8.5),(22*side,0,141,7.2,7.4)])
     shell(upper, 2, [(26*side,0,121,7.9,8),(25*side,0,128,9.4,9.4),(23*side,0,136,9.6,9.3)])
     shell(upper, 0, [(27*side,0,128,8.1,9.2),(26*side,0,130,10.4,10.7),(24*side,0,138,10.3,10.6),
                      (23*side,0,143,8.9,8.7),(22*side,0,146,4.6,5.5)])
     shell(upper, 0, [(27.5*side,0,124,7.1,8.1),(27*side,0,126,8.8,9.1),(26*side,0,132,9.2,9.7)])
+    x = 24.5 * side
+    plate(upper, 2, [(x - 5.7, -9.4, 136.5), (x - 2.9, -11.1, 131),
+                      (x + 3, -11.1, 131), (x + 5.7, -9.4, 136.5),
+                      (x, -10.2, 141)], 1.2)
+    plate(upper, 1, [(x - 2.2, -11.05, 135.9), (x, -11.6, 133.4),
+                      (x + 2.2, -11.05, 135.9), (x, -11.1, 138.4)], .6)
     shell(fore, 3, [(31*side,-2,85,4.1,4.4),(30*side,-1,94,5.5,5.8),(29*side,0,103,6.6,6.4),
                     (29*side,0,112,5.6,5.8)])
     for z, width in ((88, 4.9), (95, 5.8), (101, 6.5)):
@@ -174,11 +212,22 @@ for mat in materials:
 for polygon, color, smooth in zip(mesh.polygons, colors, smoothing, strict=True):
     polygon.material_index = color
     polygon.use_smooth = smooth
-for name in rig_data.bones.keys():
-    group = body.vertex_groups.new(name=name)
-    ids = [i for i, owner in enumerate(weights) if owner == name]
-    if ids:
-        group.add(ids, 1., "REPLACE")
+groups = {name: body.vertex_groups.new(name=name) for name in rig_data.bones.keys()}
+for index, owner in enumerate(weights):
+    if isinstance(owner, tuple):
+        upper, lower, influence = owner
+        if influence > 0.:
+            groups[upper].add([index], influence, "REPLACE")
+        if influence < 1.:
+            groups[lower].add([index], 1. - influence, "REPLACE")
+    else:
+        groups[owner].add([index], 1., "REPLACE")
+editable = bmesh.new()
+editable.from_mesh(mesh)
+bmesh.ops.recalc_face_normals(editable, faces=list(editable.faces))
+editable.to_mesh(mesh)
+editable.free()
+mesh.update()
 body.parent = rig
 deform = body.modifiers.new("MeridianRig", "ARMATURE")
 deform.object = rig

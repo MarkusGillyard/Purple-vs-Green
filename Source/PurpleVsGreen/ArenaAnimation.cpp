@@ -1,6 +1,8 @@
 #include "ArenaSoldier.h"
 
 #include "ArenaMatch.h"
+#include "CastPose.h"
+#include "KayKitCastMotion.h"
 #include "Camera/CameraComponent.h"
 #include "Components/PoseableMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
@@ -17,6 +19,21 @@ struct FCastGesture
     float Roll;
     float Support;
 };
+
+constexpr const PvG::KayKit::FCastSample* Motion[] = {
+    PvG::KayKit::Shoot, PvG::KayKit::Spellcasting, PvG::KayKit::SpellcastingLong, PvG::KayKit::Raise,
+};
+
+FVector SampleMotion(PvG::Spell Spell, float Phase)
+{
+    const auto* Samples = Motion[PvG::Index(Spell)];
+    const float Position = Phase * (PvG::KayKit::CastSampleCount - 1);
+    const int Index = FMath::Min(FMath::FloorToInt(Position), PvG::KayKit::CastSampleCount - 2);
+    const auto& A = Samples[Index];
+    const auto& B = Samples[Index + 1];
+    return FMath::Lerp(FVector(A.Reach, A.Sweep, A.Lift), FVector(B.Reach, B.Sweep, B.Lift),
+        PvG::Ease(Position - Index));
+}
 
 constexpr FCastGesture Gestures[] = {
     {8.f, 2.f, 1.f, 4.f, 13.f, .16f},
@@ -36,8 +53,11 @@ float Smooth(float Value)
 void AArenaSoldier::Animate(float DeltaSeconds, double Now)
 {
     const FVector Velocity = GetVelocity();
-    const FVector LocalVelocity = GetActorQuat().UnrotateVector(FVector(Velocity.X, Velocity.Y, 0));
-    const float Speed = LocalVelocity.Size2D();
+    const FVector PlanarVelocity(Velocity.X, Velocity.Y, 0);
+    const float VelocityBlend = 1.f - FMath::Exp(-DeltaSeconds * 14.f);
+    PoseVelocity = FMath::Lerp(PoseVelocity, PlanarVelocity, VelocityBlend);
+    const FVector LocalPoseVelocity = GetActorQuat().UnrotateVector(PoseVelocity);
+    const float Speed = PoseVelocity.Size2D();
     const float Pace = FMath::Clamp(Speed / 590.f, 0.f, 1.f);
     const float Cadence = FMath::GetMappedRangeValueClamped(FVector2f(35.f, 820.f), FVector2f(1.72f, 4.7f), Speed);
     const bool Airborne = GetCharacterMovement()->IsFalling();
@@ -49,38 +69,42 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
     Landing = FMath::Max(0.f, Landing - DeltaSeconds * 4.6f);
     AirPose = FMath::FInterpTo(AirPose, Airborne ? 1.f : 0.f, DeltaSeconds, 13.f);
 
-    const float CastAge = static_cast<float>(Now - LastCast);
     const float Hit = FMath::Exp(-FMath::Max(0.f, static_cast<float>(Now - LastHit)) * 12.f);
     const FCastGesture& Gesture = Gestures[PvG::Index(Rules.ActiveSpell)];
-    const float Windup = PvG::Arsenal[PvG::Index(Rules.ActiveSpell)].Windup;
-    const float Gather = Rules.Charging && Windup > 0.f ? Smooth(1.f - static_cast<float>(ReleaseAt - Now) / Windup) : 0.f;
-    const float Reach = FMath::Exp(-FMath::Max(0.f, CastAge) * 6.5f);
-    const float ReleasePulse = Reach * (1.f - FMath::Exp(-FMath::Max(0.f, CastAge) * 51.f));
-    PoseCast = FMath::FInterpTo(PoseCast, Rules.Charging ? .30f + Gather * .7f : Reach,
-        DeltaSeconds, Rules.Charging ? 24.f : 30.f);
+    const PvG::CastPose Cast = PvG::SampleCast(Rules.ActiveSpell, Rules.Charging,
+        Now - (Rules.Charging ? ReleaseAt : LastCast));
+    const float Gather = Cast.Gather;
+    const float ReleasePulse = Cast.Release;
+    PoseCast = Gather * .52f + ReleasePulse;
+    const FVector MotionOffset = SampleMotion(Rules.ActiveSpell, Cast.Phase);
     PoseWard = FMath::FInterpTo(PoseWard, Now < Rules.WardUntil ? 1.f : 0.f, DeltaSeconds, 16.f);
 
     const FRotator View = Controller ? Controller->GetControlRotation() : Aim;
-    UpdateArmorPose(LocalVelocity, Cadence, Pace, AirPose, Hit, FRotator::NormalizeAxis(View.Pitch));
-    if (Speed > 150.f && !Airborne && Now >= LastStep)
+    UpdateArmorPose(DeltaSeconds, LocalPoseVelocity, Cadence, Pace, AirPose, Hit, FRotator::NormalizeAxis(View.Pitch), MotionOffset);
+    if (DeltaSeconds > 0.f && PlanarVelocity.SizeSquared2D() > FMath::Square(150.) && !Airborne && Now >= LastStep)
     {
         Arena->Feedback(GetActorLocation(), 8, .20f + .045f * Pace);
         LastStep = Now + 1.f / Cadence;
     }
 
     FVector2D Turn = FVector2D::ZeroVector;
-    if (HasViewHistory)
+    if (HasViewHistory && DeltaSeconds > UE_SMALL_NUMBER)
     {
         const FRotator Delta = (View - LastView).GetNormalized();
-        Turn = {FMath::Clamp(Delta.Yaw, -8., 8.), FMath::Clamp(Delta.Pitch, -7., 7.)};
+        const double FrameScale = 1. / (DeltaSeconds * 60.);
+        Turn = {FMath::Clamp(Delta.Yaw * FrameScale, -8., 8.),
+            FMath::Clamp(Delta.Pitch * FrameScale, -7., 7.)};
     }
-    HasViewHistory = true;
-    LastView = View;
-    ViewSway = FMath::Vector2DInterpTo(ViewSway, Turn, DeltaSeconds, 12.f);
+    if (DeltaSeconds > 0.f)
+    {
+        HasViewHistory = true;
+        LastView = View;
+        ViewSway = FMath::Lerp(ViewSway, Turn, 1.f - FMath::Exp(-DeltaSeconds * 12.f));
+    }
 
     const float Cycle = Stride * 2.f * UE_PI;
     const float Bob = FMath::Cos(Cycle * 2.f) * Pace * (1.f - AirPose);
-    const float Strafe = FMath::Clamp(LocalVelocity.Y / 590., -1., 1.);
+    const float Strafe = FMath::Clamp(LocalPoseVelocity.Y / 590., -1., 1.);
     const float Breath = FMath::Sin(Now * 2.65) * .28f * (1.f - Pace);
     CastingHands->SetRelativeLocation({
         ReleasePulse * Gesture.Reach - Gather * Gesture.Gather - 3.5f * AirPose - 2.f * Hit,
@@ -91,8 +115,8 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
         -ViewSway.Y * .9f - Landing * 6.f + Hit * 2.f,
         -ViewSway.X * .7f, Bob * 1.8f + Strafe * 2.6f + HitSide * Hit * 4.f));
 
-    CastingRight->SetRelativeLocation({56.f + PoseCast * 3.f, 23.f + PoseCast * Gesture.Spread,
-        -23.f + PoseCast * Gesture.Lift * .56f - AirPose * 1.4f});
+    CastingRight->SetRelativeLocation(FVector(56.f + PoseCast * 3.f, 23.f + PoseCast * Gesture.Spread,
+        -23.f + PoseCast * Gesture.Lift * .56f - AirPose * 1.4f) + MotionOffset * FVector(5., 9., 4.));
     CastingLeft->SetRelativeLocation({52.f + PoseCast * Gesture.Support * 6.f,
         -24.f - PoseCast * Gesture.Spread * Gesture.Support + PoseWard * 5.2f,
         -26.f + PoseCast * Gesture.Lift * Gesture.Support + PoseWard * 11.f});
@@ -100,7 +124,7 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
         -18.f + PoseCast * 8.f, 12.f + PoseCast * Gesture.Roll));
     CastingLeft->SetRelativeRotation(FRotator(7.f + PoseWard * 32.f + PoseCast * Gesture.Support * 15.f,
         17.f - PoseCast * Gesture.Support * 14.f - PoseWard * 5.f, -12.f + PoseWard * 39.f));
-    const float CastExtension = PoseCast * (1.f - .70f * Gather);
+    const float CastExtension = ReleasePulse;
     for (int Index = 0; Index < Digits.Num(); ++Index)
     {
         const bool Right = Index >= 4;
@@ -113,11 +137,11 @@ void AArenaSoldier::Animate(float DeltaSeconds, double Now)
     }
 
     Camera->SetFieldOfView(FMath::FInterpTo(Camera->FieldOfView,
-        Rules.Charging && Rules.ActiveSpell == PvG::Spell::Lance ? 74.f : (Speed > 635.f ? 102.f : 96.f),
+        Rules.Charging && Rules.ActiveSpell == PvG::Spell::Lance ? 74.f : (PlanarVelocity.SizeSquared2D() > FMath::Square(635.) ? 102.f : 96.f),
         DeltaSeconds, 10.f));
 }
 
-void AArenaSoldier::UpdateArmorPose(FVector LocalVelocity, float Cadence, float Pace, float Flight, float Hit, float AimPitch)
+void AArenaSoldier::UpdateArmorPose(float DeltaSeconds, FVector LocalVelocity, float Cadence, float Pace, float Flight, float Hit, float AimPitch, FVector MotionOffset)
 {
     const USkeletalMesh* Body = Cast<USkeletalMesh>(Battlemage->GetSkinnedAsset());
     if (!Body || Battlemage->BoneSpaceTransforms.Num() != ComponentReference.Num())
@@ -141,16 +165,17 @@ void AArenaSoldier::UpdateArmorPose(FVector LocalVelocity, float Cadence, float 
     const float Swing = FMath::Sin(Cycle) * Pace;
     const float Strafe = FMath::Clamp(LocalVelocity.Y / 590., -1., 1.);
     const float Forward = FMath::Clamp(LocalVelocity.X / 590., -1., 1.);
+    const float Breathing = FMath::Sin(GetWorld()->GetTimeSeconds() * 2.65) * (1.f - Pace);
     const float Follow = Gestures[PvG::Index(Rules.ActiveSpell)].Support;
     Rotate(TEXT("Pelvis"), FRotator(-Forward * 7.f, Swing * 7.f, Strafe * 6.f));
-    Rotate(TEXT("Chest"), FRotator(-Forward * 5.f + Hit * 13.f, -Swing * 11.f + PoseCast * 9.f,
+    Rotate(TEXT("Chest"), FRotator(-Forward * 5.f + Breathing * 1.5f + Hit * 13.f, -Swing * 11.f + PoseCast * 9.f,
         -Strafe * 5.f + HitSide * Hit * 13.f));
     Rotate(TEXT("Head"), FRotator(AimPitch * .54f + Forward * 6.f - Hit * 5.f, Swing * 3.f, -HitSide * Hit * 4.f));
-    Rotate(TEXT("UpperArm_R"), FRotator(12.f - Swing * 24.f + PoseCast * (58.f + AimPitch * .54f),
-        -9.f + PoseCast * 5.f, -4.f - PoseCast * 8.f));
+    Rotate(TEXT("UpperArm_R"), FRotator(12.f - Swing * 24.f + PoseCast * (58.f + AimPitch * .54f) + MotionOffset.Z * 15.,
+        -9.f + PoseCast * 5.f + MotionOffset.Y * 24., -4.f - PoseCast * 8.f));
     Rotate(TEXT("UpperArm_L"), FRotator(14.f + Swing * 25.f + PoseWard * 61.f + PoseCast * Follow * 26.f,
         7.f - PoseWard * 17.f, 4.f + PoseWard * 16.f));
-    Rotate(TEXT("Forearm_R"), FRotator(18.f + PoseCast * 26.f, 0, 0));
+    Rotate(TEXT("Forearm_R"), FRotator(18.f + PoseCast * 26.f + MotionOffset.X * 16., 0, 0));
     Rotate(TEXT("Forearm_L"), FRotator(23.f + PoseWard * 49.f + PoseCast * Follow * 15.f, 0, 0));
     Rotate(TEXT("Hand_R"), FRotator(PoseCast * -13.f, PoseCast * 8.f, -PoseCast * 10.f));
     Rotate(TEXT("Hand_L"), FRotator(PoseWard * 12.f, -PoseWard * 9.f, PoseWard * 13.f));
@@ -171,7 +196,7 @@ void AArenaSoldier::UpdateArmorPose(FVector LocalVelocity, float Cadence, float 
     const FVector Step = (LocalVelocity * (FMath::Lerp(.62f, .36f, Pace) / Cadence)).GetClampedToMaxSize(53.);
     const double Stance = FMath::Lerp(.62, .36, static_cast<double>(Pace));
     const FTransform BodyTransform = Battlemage->GetComponentTransform();
-    const auto Plant = [&](FName ThighName, FName ShinName, FName FootName, double Offset)
+    const auto Plant = [&](FName ThighName, FName ShinName, FName FootName, int Side)
     {
         const int Thigh = Skeleton.FindBoneIndex(ThighName);
         const int Shin = Skeleton.FindBoneIndex(ShinName);
@@ -182,6 +207,7 @@ void AArenaSoldier::UpdateArmorPose(FVector LocalVelocity, float Cadence, float 
         const FVector RefHip = ComponentReference[Thigh].GetTranslation();
         const FVector RefKnee = ComponentReference[Shin].GetTranslation();
         const FVector RefAnkle = ComponentReference[Foot].GetTranslation();
+        const double Offset = Side * .5;
         const double Phase = FMath::Fmod(Stride + Offset, 1.);
         const bool Swinging = Phase >= Stance;
         const float LiftPhase = Swinging ? static_cast<float>((Phase - Stance) / (1. - Stance)) : 0.f;
@@ -195,15 +221,23 @@ void AArenaSoldier::UpdateArmorPose(FVector LocalVelocity, float Cadence, float 
         const FVector Hip = PoseComponents[Thigh].GetTranslation();
         const double Upper = FVector::Dist(RefHip, RefKnee);
         const double Lower = FVector::Dist(RefKnee, RefAnkle);
-        if (Flight < .05f)
+        double FloorOffset = 0.;
+        if (Flight < 1.f)
         {
             const FVector FootWorld = BodyTransform.TransformPosition(FVector(Ankle.X, Ankle.Y, 0));
             FHitResult Floor;
             FCollisionQueryParams Query(SCENE_QUERY_STAT(PvGFoot), false, this);
             if (GetWorld()->LineTraceSingleByObjectType(Floor, FootWorld + FVector(0, 0, 20),
-                FootWorld - FVector(0, 0, 31), FCollisionObjectQueryParams(ECC_WorldStatic), Query))
-                Ankle.Z += FMath::Clamp(Floor.ImpactPoint.Z - FootWorld.Z, -15., 13.);
+                FootWorld - FVector(0, 0, 31), FCollisionObjectQueryParams(ECC_WorldStatic), Query) &&
+                Floor.ImpactNormal.Z >= GetCharacterMovement()->GetWalkableFloorZ())
+                FloorOffset = FMath::Clamp(Floor.ImpactPoint.Z - FootWorld.Z, -15., 13.) * (1. - Flight);
         }
+
+        // The probe can switch surfaces at a step edge. Blend only the correction;
+        // the stride and jump remain driven by the current motion.
+        FootFloorOffsets[Side] = FMath::Lerp(FootFloorOffsets[Side], FloorOffset,
+            1. - FMath::Exp(-DeltaSeconds * 18.));
+        Ankle.Z += FootFloorOffsets[Side];
 
         const FVector Axis = (Ankle - Hip).GetSafeNormal(UE_SMALL_NUMBER, FVector(0, 0, -1));
         const double Distance = FMath::Clamp(FVector::Dist(Hip, Ankle), FMath::Abs(Upper - Lower) + 1., Upper + Lower - .65);
@@ -221,8 +255,8 @@ void AArenaSoldier::UpdateArmorPose(FVector LocalVelocity, float Cadence, float 
         Pose[Shin].SetRotation(ThighTurn.Inverse() * ShinTurn);
         Pose[Foot].SetRotation(ShinTurn.Inverse() * FootTurn);
     };
-    Plant(TEXT("Thigh_R"), TEXT("Shin_R"), TEXT("Foot_R"), 0.);
-    Plant(TEXT("Thigh_L"), TEXT("Shin_L"), TEXT("Foot_L"), .5);
+    Plant(TEXT("Thigh_R"), TEXT("Shin_R"), TEXT("Foot_R"), 0);
+    Plant(TEXT("Thigh_L"), TEXT("Shin_L"), TEXT("Foot_L"), 1);
     Battlemage->MarkRefreshTransformDirty();
 }
 

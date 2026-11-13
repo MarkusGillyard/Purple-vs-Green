@@ -49,3 +49,16 @@ PVG_MERIDIAN_ART="$PVG_MERIDIAN_ART" "$PVG_ENGINE/Engine/Binaries/Linux/UnrealEd
 
 Review the imported assets before copying the Meridian meshes and updated materials to
 the game project.
+
+## Casting motion samples
+
+Download KayKit Character Animations 1.1 Free from the publisher linked in the
+[asset ledger](../../Docs/Assets.md). Extract the medium ranged-combat FBX and
+regenerate the normalized hand trajectories with Blender 5.2.2.
+
+```bash
+blender -b --factory-startup --python-exit-code 1 --python Tools/Art/extract_cast_motion.py --   /path/to/Rig_Medium_CombatRanged.fbx Source/PurpleVsGreen/KayKitCastMotion.h
+```
+
+Run this command from the repository root. The game blends these samples into its
+existing articulated rig and plays them against the accepted cast's release time.
